@@ -398,7 +398,7 @@ def render_usage_banner(user: dict):
             st.warning("⚠️ **Free tier exhausted** — Upgrade to Pro for unlimited uploads")
 
 def render_upgrade_cta(user: dict):
-    """Show upgrade call-to-action"""
+    """Show upgrade call-to-action (only for non-Pro users)"""
     if user.get("is_pro"):
         return
     
@@ -416,10 +416,6 @@ def render_upgrade_cta(user: dict):
                 st.components.v1.html(f'<script>window.open("{checkout_url}", "_blank");</script>', height=0)
             except Exception as e:
                 st.error(f"Error creating checkout: {str(e)}")
-    
-    # Show legal info below upgrade CTA
-    st.markdown("---")
-    render_legal_expanders()
 
 def render_paywall():
     """Show paywall when free tier exhausted"""

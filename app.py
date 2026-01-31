@@ -21,7 +21,7 @@ from expense_analyzer import (
 from auth import (
     render_auth_ui, render_usage_banner, render_upgrade_cta,
     render_paywall, can_analyze, increment_usage, get_or_create_user,
-    create_checkout_session
+    create_checkout_session, render_legal_expanders
 )
 
 # Page config
@@ -2491,9 +2491,13 @@ if 'analysis' in st.session_state:
     # Use the existing render_analysis function
     render_analysis(analysis, is_demo=False, pnl_data=pnl_data, transactions=transactions, account_map=account_map, industry=selected_industry, qbo_totals=qbo_totals)
     
-    # Show upgrade CTA for free users
+    # Show upgrade CTA for free users only
     if user and not user.get("is_pro"):
         render_upgrade_cta(user)
+    
+    # Show legal info for all users
+    st.markdown("---")
+    render_legal_expanders()
 
 # Logout and account management in sidebar
 if user:
