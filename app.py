@@ -1594,7 +1594,7 @@ def render_analysis(analysis, is_demo=False, pnl_data=None, transactions=None, a
                         stripped_samples.append(f"'{name}' -> '{stripped}'")
                     st.write(f"**GL names stripped:** {stripped_samples}")
     
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3 = st.columns(3)
     
     with col1:
         st.metric("Total Expenses", format_currency(analysis.total_ga_expenses))
@@ -1605,9 +1605,6 @@ def render_analysis(analysis, is_demo=False, pnl_data=None, transactions=None, a
     with col3:
         fixed_pct = (analysis.fixed_costs / analysis.total_ga_expenses * 100) if analysis.total_ga_expenses > 0 else 0
         st.metric("Fixed Costs", format_currency(analysis.fixed_costs), f"{fixed_pct:.0f}% of total")
-    
-    with col4:
-        st.metric("Unidentified Vendors", format_currency(analysis.unknown_vendors_total), f"{analysis.unknown_vendors_count} txns", delta_color="inverse")
     
     # Industry Benchmark Comparison
     benchmark = INDUSTRY_BENCHMARKS.get(industry, INDUSTRY_BENCHMARKS["default"])
@@ -1676,12 +1673,6 @@ How much of every dollar earned goes to operating expenses.
 **Fixed Costs**  
 Expenses that stay roughly the same each month (rent, insurance, salaries).  
 *Why it matters:* High fixed costs = less flexibility. If revenue drops, these costs don't.
-
----
-
-**Unidentified Vendors**  
-Transactions where we couldn't identify who was paid.  
-*Why it matters:* Makes it harder to spot patterns or negotiate better rates. Consider cleaning up vendor names in QuickBooks.
 
 ---
 
@@ -1763,31 +1754,6 @@ Expenses that are predictable and stable.
         if vendors_data:
             df = pd.DataFrame(vendors_data)
             st.dataframe(df, column_config={"Total Spend": st.column_config.NumberColumn(format="$%.2f"), "Avg Transaction": st.column_config.NumberColumn(format="$%.2f")}, hide_index=True, use_container_width=True)
-        if analysis.unknown_vendors_total > 0:
-            st.error(f"⚠️ {format_currency(analysis.unknown_vendors_total)} in expenses have no vendor identified ({analysis.unknown_vendors_count} transactions)")
-            
-            # Show unknown vendor transactions if we have transaction data
-            if transactions:
-                unknown_txns = [t for t in transactions if not t.vendor or t.vendor.strip() == "" or t.vendor.strip().lower() == "unknown"]
-                if unknown_txns:
-                    with st.expander(f"📋 View {len(unknown_txns)} Unidentified Transactions", expanded=False):
-                        st.caption("These transactions have no vendor name — consider updating them in QuickBooks for better tracking.")
-                        unknown_data = [{
-                            "Date": t.date,
-                            "Account": t.account,
-                            "Description": t.description[:50] + "..." if len(t.description) > 50 else t.description,
-                            "Amount": t.amount
-                        } for t in sorted(unknown_txns, key=lambda x: -abs(x.amount))[:100]]  # Top 100 by amount
-                        df = pd.DataFrame(unknown_data)
-                        st.dataframe(
-                            df, 
-                            column_config={"Amount": st.column_config.NumberColumn(format="$%.2f")}, 
-                            hide_index=True, 
-                            use_container_width=True
-                        )
-                        if len(unknown_txns) > 100:
-                            st.caption(f"Showing top 100 of {len(unknown_txns)} transactions by amount")
-    
     # Monthly trend
     st.divider()
     st.header("📅 Monthly Expense Trend")
