@@ -1056,13 +1056,14 @@ def build_pnl_from_transactions(transactions: list, account_map: dict) -> dict:
 
 def calculate_pnl_totals(pnl_data: dict) -> dict:
     """Calculate P&L totals from pnl_data"""
-    total_revenue = sum(abs(v) for v in pnl_data.get("Revenue", {}).values())
-    total_cogs = sum(abs(v) for v in pnl_data.get("Cost of Goods Sold", {}).values())
+    # Sum values directly - negatives (refunds, credits) should reduce totals
+    total_revenue = sum(v for v in pnl_data.get("Revenue", {}).values())
+    total_cogs = sum(v for v in pnl_data.get("Cost of Goods Sold", {}).values())
     gross_profit = total_revenue - total_cogs
-    total_expenses = sum(abs(v) for v in pnl_data.get("Expenses", {}).values())
+    total_expenses = sum(v for v in pnl_data.get("Expenses", {}).values())
     operating_income = gross_profit - total_expenses
-    total_other_income = sum(abs(v) for v in pnl_data.get("Other Income", {}).values())
-    total_other_expense = sum(abs(v) for v in pnl_data.get("Other Expense", {}).values())
+    total_other_income = sum(v for v in pnl_data.get("Other Income", {}).values())
+    total_other_expense = sum(v for v in pnl_data.get("Other Expense", {}).values())
     net_income = operating_income + total_other_income - total_other_expense
     
     return {
@@ -2116,9 +2117,9 @@ if analyze_btn and pl_file and user:
             for item in sorted(expense_items, key=lambda x: abs(x.total), reverse=True):
                 cat = ExpenseCategory(
                     name=item.name,
-                    total=abs(item.total),
-                    pct_of_total_expenses=(abs(item.total) / totals['expenses'] * 100) if totals['expenses'] else 0,
-                    pct_of_revenue=(abs(item.total) / totals['revenue'] * 100) if totals['revenue'] else 0,
+                    total=item.total,
+                    pct_of_total_expenses=(item.total / totals['expenses'] * 100) if totals['expenses'] else 0,
+                    pct_of_revenue=(item.total / totals['revenue'] * 100) if totals['revenue'] else 0,
                     transaction_count=0,  # Not available from P&L
                     avg_transaction=0,
                     monthly_trend={m: item.monthly_values.get(m, 0) for m in statement.months if m.lower() != 'total'}
