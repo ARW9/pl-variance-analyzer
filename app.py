@@ -2181,6 +2181,15 @@ if analyze_btn and pl_file and user:
                 amount: float
                 account_type: str = "Expense"
             
+            # Map PLSection to expected account_type strings
+            section_to_type = {
+                PLSection.INCOME: "Revenue",
+                PLSection.COGS: "Cost of Goods Sold",
+                PLSection.EXPENSES: "Expense",
+                PLSection.OTHER_INCOME: "Other Income",
+                PLSection.OTHER_EXPENSE: "Other Expense",
+            }
+            
             transactions = []
             for item in statement.line_items:
                 if item.is_total_row:
@@ -2196,7 +2205,7 @@ if analyze_btn and pl_file and user:
                             date=month_date,
                             account=item.name,
                             amount=value,
-                            account_type=item.section.value
+                            account_type=section_to_type.get(item.section, "Expense")
                         ))
             
             # Cleanup temp files
