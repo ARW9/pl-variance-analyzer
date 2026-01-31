@@ -302,8 +302,7 @@ def render_upgrade_cta(user: dict):
         if st.button("Upgrade Now", type="primary", use_container_width=True):
             try:
                 checkout_url = create_checkout_session(user["email"], user["id"])
-                st.markdown(f'<meta http-equiv="refresh" content="0;url={checkout_url}">', unsafe_allow_html=True)
-                st.info("Redirecting to checkout...")
+                st.markdown(f'<a href="{checkout_url}" target="_blank" rel="noopener noreferrer"><button style="background:#dc2626;color:white;padding:10px 20px;border:none;border-radius:5px;font-weight:bold;cursor:pointer;">Click here to open checkout</button></a>', unsafe_allow_html=True)
             except Exception as e:
                 st.error(f"Error creating checkout: {str(e)}")
 
@@ -320,7 +319,6 @@ def render_paywall():
         user = st.session_state.user
         try:
             checkout_url = create_checkout_session(user["email"], user["id"])
-            st.markdown(f'<meta http-equiv="refresh" content="0;url={checkout_url}">', unsafe_allow_html=True)
-            st.info("Redirecting to checkout...")
+            st.markdown(f'<a href="{checkout_url}" target="_blank" rel="noopener noreferrer"><button style="background:#dc2626;color:white;padding:10px 20px;border:none;border-radius:5px;font-weight:bold;cursor:pointer;">Click here to open checkout</button></a>', unsafe_allow_html=True)
         except Exception as e:
             st.error(f"Error: {str(e)}")
