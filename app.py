@@ -810,14 +810,34 @@ def filter_transactions_by_month(transactions: list, month: str) -> list:
     for txn in transactions:
         try:
             date_str = txn.date if hasattr(txn, 'date') else txn.get('date', '')
-            if '/' in str(date_str):
-                parts = str(date_str).split('/')
+            date_str = str(date_str).strip()
+            
+            # Use pandas for consistent date parsing
+            try:
+                parsed = pd.to_datetime(date_str, dayfirst=False)
+                txn_month = parsed.strftime("%Y-%m")
+                if txn_month == month:
+                    filtered.append(txn)
+                continue
+            except:
+                pass
+            
+            # Fallback: manual parsing
+            if '/' in date_str:
+                parts = date_str.split('/')
                 if len(parts) >= 3:
-                    txn_month = f"{parts[2]}-{parts[0].zfill(2)}"
+                    # MM/DD/YYYY
+                    if len(parts[2]) == 4:
+                        txn_month = f"{parts[2]}-{parts[0].zfill(2)}"
+                    # YYYY/MM/DD
+                    elif len(parts[0]) == 4:
+                        txn_month = f"{parts[0]}-{parts[1].zfill(2)}"
+                    else:
+                        continue
                     if txn_month == month:
                         filtered.append(txn)
-            elif '-' in str(date_str):
-                if str(date_str)[:7] == month:
+            elif '-' in date_str:
+                if date_str[:7] == month:
                     filtered.append(txn)
         except:
             pass
