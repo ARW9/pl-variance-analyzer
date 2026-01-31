@@ -189,16 +189,24 @@ def parse_pl_csv(file_path: str) -> PLStatement:
         if "accrual basis" in account_name.lower() or "cash basis" in account_name.lower():
             continue
         
-        # Skip calculated rows we'll derive ourselves
+        # Capture QBO's calculated rows as source of truth (don't add as line items)
         if account_name.lower() in ["gross profit", "net operating income", "net other income", "net income"]:
-            # But still capture the values for validation
             monthly_values = {}
             for j, month in enumerate(months):
                 if j + 1 < len(row):
                     monthly_values[month] = parse_currency(row.iloc[j + 1])
             
-            # Store in appropriate calculated field
-            total_val = monthly_values.get(months[-1], 0) if months else 0
+            # Store QBO's calculated values directly in statement
+            name_lower = account_name.lower()
+            if name_lower == "gross profit":
+                statement.gross_profit = monthly_values
+            elif name_lower == "net operating income":
+                statement.net_operating_income = monthly_values
+            elif name_lower == "net other income":
+                # This is already net (Other Income - Other Expense)
+                pass  # We'll derive this from other_income - other_expense
+            elif name_lower == "net income":
+                statement.net_income = monthly_values
             continue
         
         # Parse monthly values
@@ -290,12 +298,20 @@ def calculate_section_totals(statement: PLStatement) -> None:
             elif item.section == PLSection.OTHER_EXPENSE:
                 statement.total_other_expense[month] = statement.total_other_expense.get(month, 0) + value
     
-    # Calculate derived totals
+    # Calculate derived totals ONLY if not already populated from QBO's calculated rows
     for month in list(statement.total_income.keys()):
-        statement.gross_profit[month] = statement.total_income.get(month, 0) - statement.total_cogs.get(month, 0)
-        statement.net_operating_income[month] = statement.gross_profit.get(month, 0) - statement.total_expenses.get(month, 0)
-        net_other = statement.total_other_income.get(month, 0) - statement.total_other_expense.get(month, 0)
-        statement.net_income[month] = statement.net_operating_income.get(month, 0) + net_other
+        # Use QBO's Gross Profit if available, otherwise calculate
+        if month not in statement.gross_profit:
+            statement.gross_profit[month] = statement.total_income.get(month, 0) - statement.total_cogs.get(month, 0)
+        
+        # Use QBO's Net Operating Income if available, otherwise calculate  
+        if month not in statement.net_operating_income:
+            statement.net_operating_income[month] = statement.gross_profit.get(month, 0) - statement.total_expenses.get(month, 0)
+        
+        # Use QBO's Net Income if available, otherwise calculate
+        if month not in statement.net_income:
+            net_other = statement.total_other_income.get(month, 0) - statement.total_other_expense.get(month, 0)
+            statement.net_income[month] = statement.net_operating_income.get(month, 0) + net_other
 
 
 def get_monthly_dataframe(statement: PLStatement, section: Optional[PLSection] = None) -> pd.DataFrame:
