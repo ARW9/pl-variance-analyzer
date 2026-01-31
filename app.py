@@ -1112,115 +1112,34 @@ if 'analysis' not in st.session_state:
     
     # FAQ Section (collapsed by default)
     with st.expander("❓ Frequently Asked Questions", expanded=False):
-        faq_data = [
-        {
-            "q": "How much does it cost?",
-            "a": """We offer a simple, transparent pricing model:
+        st.markdown("""
+**How much does it cost?**
 
-• **Free Tier** — Get **3 free analyses** to try the tool and see the value it provides.
+• **Free Tier** — 3 free analyses to try the tool
+• **Pro Plan** — $10/month for unlimited analyses
 
-• **Pro Plan** — **$10/month** for unlimited analyses. Cancel anytime.
+---
 
-No hidden fees, no annual commitments required. The Pro plan pays for itself if it helps you find even one billing error or negotiate one vendor contract."""
-        },
-        {
-            "q": "How safe is the data I import here?",
-            "a": """Your data security is our top priority. Here's how we protect your information:
-            
-• **Secure Processing** — All analysis happens on our encrypted servers. Your data is never shared with third parties.
+**How safe is my data?**
 
-• **No Data Retention** — Uploaded files are processed and then automatically deleted. We don't store your financial data.
+• Files are processed and immediately deleted
+• We never store your financial data
+• Read-only analysis - can't modify your QuickBooks
+• All connections encrypted via HTTPS
 
-• **Read-Only Analysis** — This tool only reads your exported files. It cannot access, modify, or connect to your QuickBooks account.
+---
 
-• **Encrypted Connection** — All data transmitted between your browser and our servers is encrypted via HTTPS.
+**What file formats are supported?**
 
-• **Secure Payments** — All payments are processed by Stripe, a PCI-compliant payment processor. We never see your card details."""
-        },
-        {
-            "q": "What KPIs are available for me to track?",
-            "a": """The analyzer provides insights into several key performance indicators:
+• Excel files (.xlsx) exported from QuickBooks Online
+• Chart of Accounts and General Ledger reports
 
-• **Expenses as % of Revenue** — How much of your revenue goes to costs. Benchmarked against industry standards.
+---
 
-• **Fixed vs Variable Cost Ratio** — Understanding your cost structure and operational flexibility.
+**Can I cancel Pro anytime?**
 
-• **Expense Consistency (CV)** — Coefficient of variation for each expense category. Identifies unpredictable spending.
-
-• **Vendor Concentration** — How dependent you are on key vendors. Highlights negotiation opportunities.
-
-• **Monthly Expense Trends** — Visual tracking of spending patterns over time.
-
-• **Discretionary vs Essential Split** — What portion of expenses are adjustable vs required for operations."""
-        },
-        {
-            "q": "What does the 'Anomaly Detection' feature do?",
-            "a": """The anomaly detection automatically identifies expenses that should be consistent but aren't:
-
-• **Expected Consistency** — Certain expenses (rent, insurance, loan payments, subscriptions) should be the same every month.
-
-• **Variance Threshold** — If these expenses vary by more than 15%, they're flagged as anomalies.
-
-• **Root Cause Analysis** — The tool shows you which months were high/low, helping identify billing errors, rate changes, or missed payments.
-
-• **Potential Recovery** — Estimates how much you might recover by investigating and correcting these anomalies."""
-        },
-        {
-            "q": "How accurate are the savings estimates?",
-            "a": """The savings estimates are conservative projections based on industry benchmarks:
-
-• **Vendor Tracking (10-15%)** — Unidentified vendors often indicate waste. Estimate assumes 10-15% recovery through better controls.
-
-• **Negotiation Opportunities (5-10%)** — Large vendor concentrations typically yield 5-10% discounts with annual commitments.
-
-• **Subscription Audits (15-25%)** — Industry data shows most companies have 15-25% unused or duplicate subscriptions.
-
-• **Anomaly Recovery** — Based on the actual variance detected in your data.
-
-These are starting points for investigation, not guarantees. Actual savings depend on your specific situation."""
-        },
-        {
-            "q": "What file formats are supported?",
-            "a": """Currently, the analyzer supports:
-
-• **Excel files (.xlsx)** — The standard export format from QuickBooks Online.
-
-• **QuickBooks Online exports** — The tool is specifically designed for QBO's Chart of Accounts and General Ledger report formats.
-
-• **Date ranges** — Any date range is supported. For best results, export at least 6-12 months of data to identify meaningful patterns.
-
-**Coming soon:** CSV files, QuickBooks Desktop exports, Xero integration."""
-        },
-        {
-            "q": "Why do some expenses show as 'Unknown' vendor?",
-            "a": """Expenses appear with 'Unknown' vendor when:
-
-• **Missing data in QBO** — The original transaction wasn't assigned a vendor/payee name.
-
-• **Bank feed imports** — Automatic bank imports sometimes don't capture vendor names.
-
-• **Journal entries** — Manual journal entries typically don't have vendor information.
-
-**Why it matters:** High percentages of unknown vendors indicate data quality issues and potential control gaps. Consider implementing stricter receipt/invoice requirements for better tracking."""
-        },
-        {
-            "q": "Can I cancel my Pro subscription?",
-            "a": """Yes, you can cancel anytime:
-
-• **No contracts** — Pro is a month-to-month subscription with no long-term commitment.
-
-• **Easy cancellation** — Email us or use the Stripe customer portal to cancel.
-
-• **Keep your analyses** — Any reports you've generated remain accessible even after cancellation.
-
-• **Re-subscribe anytime** — Come back whenever you need more analyses."""
-            }
-        ]
-        
-        for faq in faq_data:
-            st.markdown(f"**{faq['q']}**")
-            st.markdown(faq["a"])
-            st.markdown("---")
+Yes! Month-to-month, no contracts. Cancel anytime via email or Stripe portal.
+        """)
     
     st.divider()
     

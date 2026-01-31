@@ -118,44 +118,50 @@ def remaining_free(user: dict) -> int:
 
 def create_checkout_session(user_email: str, user_id: str) -> str:
     """Create Stripe checkout session"""
-    init_stripe()
+    try:
+        init_stripe()
+    except Exception as e:
+        raise Exception("Stripe not configured. Please contact support to upgrade.")
     
-    # Get or create Stripe customer
-    supabase = get_supabase()
-    user = supabase.table("users").select("stripe_customer_id").eq("id", user_id).execute()
-    
-    customer_id = user.data[0].get("stripe_customer_id") if user.data else None
-    
-    if not customer_id:
-        customer = stripe.Customer.create(email=user_email)
-        customer_id = customer.id
-        supabase.table("users").update(
-            {"stripe_customer_id": customer_id}
-        ).eq("id", user_id).execute()
-    
-    # Create checkout session
-    session = stripe.checkout.Session.create(
-        customer=customer_id,
-        payment_method_types=["card"],
-        line_items=[{
-            "price_data": {
-                "currency": "usd",
-                "product_data": {
-                    "name": "P&L Variance Analyzer Pro",
-                    "description": "Unlimited analyses per month",
+    try:
+        # Get or create Stripe customer
+        supabase = get_supabase()
+        user = supabase.table("users").select("stripe_customer_id").eq("id", user_id).execute()
+        
+        customer_id = user.data[0].get("stripe_customer_id") if user.data else None
+        
+        if not customer_id:
+            customer = stripe.Customer.create(email=user_email)
+            customer_id = customer.id
+            supabase.table("users").update(
+                {"stripe_customer_id": customer_id}
+            ).eq("id", user_id).execute()
+        
+        # Create checkout session
+        session = stripe.checkout.Session.create(
+            customer=customer_id,
+            payment_method_types=["card"],
+            line_items=[{
+                "price_data": {
+                    "currency": "usd",
+                    "product_data": {
+                        "name": "P&L Variance Analyzer Pro",
+                        "description": "Unlimited analyses per month",
+                    },
+                    "unit_amount": PRO_PRICE,
+                    "recurring": {"interval": "month"},
                 },
-                "unit_amount": PRO_PRICE,
-                "recurring": {"interval": "month"},
-            },
-            "quantity": 1,
-        }],
-        mode="subscription",
-        success_url=st.secrets.get("app_url", "https://pl-variance-analyzer.streamlit.app") + "?success=true",
-        cancel_url=st.secrets.get("app_url", "https://pl-variance-analyzer.streamlit.app") + "?canceled=true",
-        metadata={"user_id": user_id},
-    )
-    
-    return session.url
+                "quantity": 1,
+            }],
+            mode="subscription",
+            success_url=st.secrets.get("app_url", "https://pl-variance-analyzer.streamlit.app") + "?success=true",
+            cancel_url=st.secrets.get("app_url", "https://pl-variance-analyzer.streamlit.app") + "?canceled=true",
+            metadata={"user_id": user_id},
+        )
+        
+        return session.url
+    except Exception as e:
+        raise Exception(f"Payment setup error: {str(e)}")
 
 def upgrade_to_pro(user_id: str):
     """Mark user as pro"""
