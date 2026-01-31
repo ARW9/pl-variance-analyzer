@@ -286,51 +286,55 @@ st.markdown("""
 st.markdown('<p class="main-header">📊 P&L Variance Analyzer</p>', unsafe_allow_html=True)
 st.markdown('<p class="sub-header">Upload your QuickBooks exports • Identify cost anomalies • Get actionable insights</p>', unsafe_allow_html=True)
 
-# Auth check
+# Auth check - get user but don't block yet
 user = render_auth_ui()
 
-if user:
-    # Show usage banner
-    render_usage_banner(user)
-    
-    # Check if user can analyze (has free uses left or is pro)
-    if not can_analyze(user):
-        render_paywall()
-        st.stop()
+# Initialize variables
+coa_file = None
+gl_file = None
+industry = "default"
+analyze_btn = False
 
-# Sidebar for file uploads (only show if logged in)
+# Sidebar
 with st.sidebar:
     st.image("https://img.icons8.com/fluency/96/analytics.png", width=60)
     
     if user:
         st.success(f"✓ {user['email']}")
+        
+        # Show usage banner in sidebar
+        if user.get("is_pro"):
+            st.caption("⭐ Pro — Unlimited")
+        else:
+            remaining = max(0, 3 - user.get("analyses_used", 0))
+            st.caption(f"📊 {remaining}/3 free analyses")
+        
         st.header("Upload Files")
+        
+        coa_file = st.file_uploader(
+            "Chart of Accounts (.xlsx)",
+            type=['xlsx'],
+            help="Export from QBO: Settings → Chart of Accounts → Run Report → Export to Excel"
+        )
+        
+        gl_file = st.file_uploader(
+            "General Ledger (.xlsx)",
+            type=['xlsx'],
+            help="Export from QBO: Reports → General Ledger → Export to Excel"
+        )
+        
+        st.divider()
+        
+        industry = st.selectbox(
+            "Industry (for benchmarks)",
+            options=list(INDUSTRY_BENCHMARKS.keys()),
+            index=list(INDUSTRY_BENCHMARKS.keys()).index("default"),
+            format_func=lambda x: x.replace("_", " ").title()
+        )
+        
+        analyze_btn = st.button("🔍 Analyze", type="primary", use_container_width=True)
     else:
-        st.info("Sign in to upload files")
-        st.stop()
-    
-    coa_file = st.file_uploader(
-        "Chart of Accounts (.xlsx)",
-        type=['xlsx'],
-        help="Export from QBO: Settings → Chart of Accounts → Run Report → Export to Excel"
-    )
-    
-    gl_file = st.file_uploader(
-        "General Ledger (.xlsx)",
-        type=['xlsx'],
-        help="Export from QBO: Reports → General Ledger → Export to Excel"
-    )
-    
-    st.divider()
-    
-    industry = st.selectbox(
-        "Industry (for benchmarks)",
-        options=list(INDUSTRY_BENCHMARKS.keys()),
-        index=list(INDUSTRY_BENCHMARKS.keys()).index("default"),
-        format_func=lambda x: x.replace("_", " ").title()
-    )
-    
-    analyze_btn = st.button("🔍 Analyze", type="primary", use_container_width=True)
+        st.info("👆 Sign in above to start analyzing")
 
 
 def save_uploaded_file(uploaded_file) -> str:
@@ -667,16 +671,28 @@ if 'analysis' not in st.session_state:
     
     faq_data = [
         {
+            "q": "How much does it cost?",
+            "a": """We offer a simple, transparent pricing model:
+
+• **Free Tier** — Get **3 free analyses** to try the tool and see the value it provides.
+
+• **Pro Plan** — **$10/month** for unlimited analyses. Cancel anytime.
+
+No hidden fees, no annual commitments required. The Pro plan pays for itself if it helps you find even one billing error or negotiate one vendor contract."""
+        },
+        {
             "q": "How safe is the data I import here?",
             "a": """Your data security is our top priority. Here's how we protect your information:
             
-• **Local Processing** — All analysis happens directly on our secure servers. Your data is never shared with third parties.
+• **Secure Processing** — All analysis happens on our encrypted servers. Your data is never shared with third parties.
 
-• **Temporary Storage** — Uploaded files are processed and then automatically deleted. We don't retain your financial data after analysis.
+• **No Data Retention** — Uploaded files are processed and then automatically deleted. We don't store your financial data.
 
 • **Read-Only Analysis** — This tool only reads your exported files. It cannot access, modify, or connect to your QuickBooks account.
 
-• **Encrypted Connection** — All data transmitted between your browser and our servers is encrypted via HTTPS."""
+• **Encrypted Connection** — All data transmitted between your browser and our servers is encrypted via HTTPS.
+
+• **Secure Payments** — All payments are processed by Stripe, a PCI-compliant payment processor. We never see your card details."""
         },
         {
             "q": "What KPIs are available for me to track?",
@@ -743,6 +759,18 @@ These are starting points for investigation, not guarantees. Actual savings depe
 • **Journal entries** — Manual journal entries typically don't have vendor information.
 
 **Why it matters:** High percentages of unknown vendors indicate data quality issues and potential control gaps. Consider implementing stricter receipt/invoice requirements for better tracking."""
+        },
+        {
+            "q": "Can I cancel my Pro subscription?",
+            "a": """Yes, you can cancel anytime:
+
+• **No contracts** — Pro is a month-to-month subscription with no long-term commitment.
+
+• **Easy cancellation** — Email us or use the Stripe customer portal to cancel.
+
+• **Keep your analyses** — Any reports you've generated remain accessible even after cancellation.
+
+• **Re-subscribe anytime** — Come back whenever you need more analyses."""
         }
     ]
     
@@ -753,11 +781,19 @@ These are starting points for investigation, not guarantees. Actual savings depe
     st.divider()
     
     # Call to action
-    st.markdown("""
-    <div style="text-align: center; padding: 2rem; background: linear-gradient(135deg, #171717 0%, #262626 100%); border-radius: 12px; margin-top: 2rem;">
-        <h3 style="color: white; margin-bottom: 1rem;">Ready to analyze your expenses?</h3>
-        <p style="color: #a3a3a3;">Upload your Chart of Accounts and General Ledger files using the sidebar</p>
-    </div>
+    if user:
+        st.markdown("""
+        <div style="text-align: center; padding: 2rem; background: linear-gradient(135deg, #171717 0%, #262626 100%); border-radius: 12px; margin-top: 2rem;">
+            <h3 style="color: white; margin-bottom: 1rem;">Ready to analyze your expenses?</h3>
+            <p style="color: #a3a3a3;">Upload your Chart of Accounts and General Ledger files using the sidebar</p>
+        </div>
+        """, unsafe_allow_html=True)
+    else:
+        st.markdown("""
+        <div style="text-align: center; padding: 2rem; background: linear-gradient(135deg, #171717 0%, #262626 100%); border-radius: 12px; margin-top: 2rem;">
+            <h3 style="color: white; margin-bottom: 1rem;">Try it free — 3 analyses included</h3>
+            <p style="color: #a3a3a3;">Sign in with your email above to get started. No credit card required.</p>
+        </div>
     """, unsafe_allow_html=True)
 
 
