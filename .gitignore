@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+*.pyo
+.env
+.DS_Store
+*.xlsx
+*.json
+!tester_inc_coa.xlsx
+!tester_inc_gl.xlsx
+venv/
+.venv/
