@@ -1504,6 +1504,17 @@ def render_analysis(analysis, is_demo=False, pnl_data=None, transactions=None, a
     # Summary metrics
     st.header("💰 Expense Analysis Summary")
     
+    # Debug: show analysis values
+    with st.expander("🔧 Debug: Analysis Values", expanded=False):
+        st.write(f"**analysis.total_ga_expenses:** ${analysis.total_ga_expenses:,.2f}")
+        st.write(f"**analysis.ga_as_pct_of_revenue:** {analysis.ga_as_pct_of_revenue:.1f}%")
+        st.write(f"**analysis.fixed_costs:** ${analysis.fixed_costs:,.2f}")
+        st.write(f"**analysis.categories:** {len(analysis.categories)}")
+        st.write(f"**analysis.unknown_vendors_total:** ${analysis.unknown_vendors_total:,.2f}")
+        if pnl_data:
+            st.write(f"**pnl_data Revenue:** ${sum(pnl_data.get('Revenue', {}).values()):,.2f}")
+            st.write(f"**pnl_data Expenses:** ${sum(pnl_data.get('Expenses', {}).values()):,.2f}")
+    
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
