@@ -1038,15 +1038,16 @@ def build_pnl_from_transactions(transactions: list, account_map: dict) -> dict:
         # Convert enum to string if needed
         type_str = acct_type.value if hasattr(acct_type, 'value') else str(acct_type)
         
-        if type_str == "Revenue":
+        type_lower = type_str.lower()
+        if type_lower in ["revenue", "income"]:
             pnl["Revenue"][acct] += amount
-        elif type_str == "Cost of Goods Sold":
+        elif type_lower in ["cost of goods sold", "cogs"]:
             pnl["Cost of Goods Sold"][acct] += amount
-        elif type_str == "Expense":
+        elif type_lower in ["expense", "expenses"]:
             pnl["Expenses"][acct] += amount
-        elif type_str == "Other Income":
+        elif type_lower in ["other income"]:
             pnl["Other Income"][acct] += amount
-        elif type_str == "Other Expense":
+        elif type_lower in ["other expense", "other expenses"]:
             pnl["Other Expense"][acct] += amount
     
     # Convert defaultdicts to regular dicts
