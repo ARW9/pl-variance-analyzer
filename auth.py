@@ -380,10 +380,6 @@ def render_auth_ui():
         send_verification_email(email, code)
         st.rerun()
     
-    # Show legal info on login page
-    st.markdown("---")
-    render_legal_expanders()
-    
     return None
 
 def render_usage_banner(user: dict):
