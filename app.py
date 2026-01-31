@@ -595,9 +595,9 @@ def render_pnl(pnl_data: dict, title: str = "📊 Profit & Loss Statement"):
     net_margin = (net_income / total_revenue * 100) if total_revenue else 0
     pnl_rows.append({"Category": "**NET INCOME**", "Amount": f"**{format_currency(net_income)}** ({net_margin:.1f}%)"})
     
-    # Display as table
+    # Display as table (using st.dataframe to avoid tabulate dependency)
     df = pd.DataFrame(pnl_rows)
-    st.markdown(df.to_markdown(index=False), unsafe_allow_html=True)
+    st.dataframe(df, hide_index=True, use_container_width=True)
     
     return {
         "total_revenue": total_revenue,
