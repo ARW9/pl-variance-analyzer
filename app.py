@@ -362,16 +362,25 @@ with st.sidebar:
                     st.error(f"Error: {e}")
     else:
         st.info("👈 Sign in on the main page to start analyzing")
-        
-    # Always show help links in sidebar
+    
+    # Always show help section in sidebar
     st.divider()
-    st.markdown("**📚 Help & Resources**")
-    if st.button("📋 How to Export Data", use_container_width=True):
-        st.session_state['show_section'] = 'export'
-    if st.button("❓ FAQs", use_container_width=True):
-        st.session_state['show_section'] = 'faq'
-    if st.button("💰 Pricing", use_container_width=True):
-        st.session_state['show_section'] = 'pricing'
+    st.markdown("**📚 Quick Help**")
+    
+    with st.expander("📋 How to Export Data"):
+        st.markdown("""
+        **Chart of Accounts:**
+        Settings → Chart of Accounts → Run Report → Export to Excel
+        
+        **General Ledger:**
+        Reports → General Ledger → Set date range → Run Report → Export to Excel
+        """)
+    
+    with st.expander("💰 Pricing"):
+        st.markdown("""
+        **Free:** 3 analyses  
+        **Pro:** $10/month unlimited
+        """)
 
 
 def save_uploaded_file(uploaded_file) -> str:
@@ -1059,138 +1068,51 @@ def render_analysis(analysis, is_demo=False, pnl_data=None, transactions=None, a
         st.bar_chart(df.set_index("Month"), color="#dc2626")
 
 
-# Helper function for section content
-def render_export_guide():
-    st.header("🎬 How to Export Your Data")
-    st.markdown("Follow these step-by-step guides to export your data from QuickBooks Online")
-
-
-def render_faq_section():
-    st.header("❓ Frequently Asked Questions")
-
-
-def render_pricing_section():
-    st.header("💰 Pricing")
-    st.markdown("""
-    ### Simple, transparent pricing
-    
-    | Plan | Price | Features |
-    |------|-------|----------|
-    | **Free** | $0 | 3 analyses to try the tool |
-    | **Pro** | $10/month | Unlimited analyses, priority support |
-    
-    The Pro plan pays for itself if it helps you find even one billing error or negotiate one vendor contract.
-    """)
-
-
 # Main content - Show landing page if no analysis yet
 if 'analysis' not in st.session_state:
     
-    # Check if user clicked a sidebar navigation button
-    show_section = st.session_state.get('show_section', None)
+    # Demo Preview Section
+    st.header("📈 See What You'll Get")
+    st.markdown("Here's an example analysis from a sample company:")
     
-    if show_section == 'export':
-        # Clear the section state after showing
-        del st.session_state['show_section']
-        
-        # Export Guide content (will be shown below)
-        st.header("🎬 How to Export Your Data")
+    demo_analysis = get_demo_analysis()
+    render_analysis(demo_analysis, is_demo=True)
+    
+    st.divider()
+    
+    # How-To Guides Section (collapsed by default)
+    with st.expander("🎬 How to Export Your Data", expanded=False):
         st.markdown("Follow these step-by-step guides to export your data from QuickBooks Online")
         
-        col1, col2 = st.columns(2)
-        with col1:
+        exp_col1, exp_col2 = st.columns(2)
+        with exp_col1:
             st.markdown("""
-            <div class="info-card">
-                <h4>📋 Export Chart of Accounts</h4>
-                <div style="margin: 1rem 0;">
-                    <p><span class="step-number">1</span> Log into QuickBooks Online</p>
-                    <p><span class="step-number">2</span> Click the <strong>Settings</strong> gear icon (top right)</p>
-                    <p><span class="step-number">3</span> Select <strong>Chart of Accounts</strong></p>
-                    <p><span class="step-number">4</span> Click <strong>Run Report</strong> button (top right)</p>
-                    <p><span class="step-number">5</span> Click <strong>Export</strong> dropdown → <strong>Export to Excel</strong></p>
-                    <p><span class="step-number">6</span> Save the .xlsx file to your computer</p>
-                </div>
-                <p style="color: #a3a3a3; font-size: 0.85rem; margin-top: 1rem;">⏱️ This only needs to be done once per company</p>
-            </div>
-            """, unsafe_allow_html=True)
-        with col2:
-            st.markdown("""
-            <div class="info-card">
-                <h4>📊 Export General Ledger</h4>
-                <div style="margin: 1rem 0;">
-                    <p><span class="step-number">1</span> Go to <strong>Reports</strong> in the left menu</p>
-                    <p><span class="step-number">2</span> Search for <strong>"General Ledger"</strong></p>
-                    <p><span class="step-number">3</span> Set your <strong>date range</strong> (e.g., This Fiscal Year)</p>
-                    <p><span class="step-number">4</span> Click <strong>Run Report</strong></p>
-                    <p><span class="step-number">5</span> Click <strong>Export</strong> dropdown → <strong>Export to Excel</strong></p>
-                    <p><span class="step-number">6</span> Save the .xlsx file to your computer</p>
-                </div>
-                <p style="color: #a3a3a3; font-size: 0.85rem; margin-top: 1rem;">💡 Export for any period you want to analyze</p>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        st.divider()
-        if st.button("← Back to Home"):
-            st.rerun()
+            **📋 Export Chart of Accounts**
+            1. Log into QuickBooks Online
+            2. Click the **Settings** gear icon (top right)
+            3. Select **Chart of Accounts**
+            4. Click **Run Report** button (top right)
+            5. Click **Export** dropdown → **Export to Excel**
+            6. Save the .xlsx file to your computer
             
-    elif show_section == 'faq':
-        del st.session_state['show_section']
-        # FAQ content will be handled below by jumping to that section
-        st.session_state['scroll_to_faq'] = True
-        st.rerun()
-        
-    elif show_section == 'pricing':
-        del st.session_state['show_section']
-        render_pricing_section()
-        st.divider()
-        if st.button("← Back to Home"):
-            st.rerun()
+            *⏱️ This only needs to be done once per company*
+            """)
+        with exp_col2:
+            st.markdown("""
+            **📊 Export General Ledger**
+            1. Go to **Reports** in the left menu
+            2. Search for **"General Ledger"**
+            3. Set your **date range** (e.g., This Fiscal Year)
+            4. Click **Run Report**
+            5. Click **Export** dropdown → **Export to Excel**
+            6. Save the .xlsx file to your computer
+            
+            *💡 Export for any period you want to analyze*
+            """)
     
-    else:
-        # Default landing page
-        
-        # Demo Preview Section
-        st.header("📈 See What You'll Get")
-        st.markdown("Here's an example analysis from a sample company:")
-        
-        demo_analysis = get_demo_analysis()
-        render_analysis(demo_analysis, is_demo=True)
-        
-        st.divider()
-        
-        # How-To Guides Section (collapsed by default)
-        with st.expander("🎬 How to Export Your Data", expanded=False):
-            st.markdown("Follow these step-by-step guides to export your data from QuickBooks Online")
-            
-            exp_col1, exp_col2 = st.columns(2)
-            with exp_col1:
-                st.markdown("""
-                **📋 Export Chart of Accounts**
-                1. Log into QuickBooks Online
-                2. Click the **Settings** gear icon (top right)
-                3. Select **Chart of Accounts**
-                4. Click **Run Report** button (top right)
-                5. Click **Export** dropdown → **Export to Excel**
-                6. Save the .xlsx file to your computer
-                
-                *⏱️ This only needs to be done once per company*
-                """)
-            with exp_col2:
-                st.markdown("""
-                **📊 Export General Ledger**
-                1. Go to **Reports** in the left menu
-                2. Search for **"General Ledger"**
-                3. Set your **date range** (e.g., This Fiscal Year)
-                4. Click **Run Report**
-                5. Click **Export** dropdown → **Export to Excel**
-                6. Save the .xlsx file to your computer
-                
-                *💡 Export for any period you want to analyze*
-                """)
-        
-        # FAQ Section (collapsed by default)
-        with st.expander("❓ Frequently Asked Questions", expanded=False):
-            faq_data = [
+    # FAQ Section (collapsed by default)
+    with st.expander("❓ Frequently Asked Questions", expanded=False):
+        faq_data = [
         {
             "q": "How much does it cost?",
             "a": """We offer a simple, transparent pricing model:
@@ -1292,12 +1214,13 @@ These are starting points for investigation, not guarantees. Actual savings depe
 • **Keep your analyses** — Any reports you've generated remain accessible even after cancellation.
 
 • **Re-subscribe anytime** — Come back whenever you need more analyses."""
-        }
-    ]
-    
-    for faq in faq_data:
-        with st.expander(faq["q"]):
+            }
+        ]
+        
+        for faq in faq_data:
+            st.markdown(f"**{faq['q']}**")
             st.markdown(faq["a"])
+            st.markdown("---")
     
     st.divider()
     
