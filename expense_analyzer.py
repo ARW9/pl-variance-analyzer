@@ -587,24 +587,17 @@ def generate_recommendations(analysis: GAAnalysis) -> List[str]:
     return formatted
 
 
-def parse_workbook_gl(gl_file: str, account_map: Dict[str, AccountType]) -> Tuple[Dict[str, AccountSummary], List[Transaction]]:
+def parse_qbo_gl(gl_file: str, account_map: Dict[str, AccountType]) -> Tuple[Dict[str, AccountSummary], List[Transaction]]:
     """
-    Parse GL from AquiferCFO Month End Close workbooks
-    Handles multi-sheet workbooks with 'Historic GL' sheet
+    Parse standard QBO General Ledger export
+    
+    QBO GL format:
+    - Row 0-3: Header info (Company name, Report name, Date range)
+    - Row 4: Column headers (Date, Transaction Type, #, Adj, Name, Memo, Split, Amount, Balance)
+    - Data rows: Account headers in col0, transactions have Date in col1
+    - "Total for X" rows contain account totals
     """
-    # Try to find the GL sheet
-    xl = pd.ExcelFile(gl_file)
-    gl_sheet = None
-    for sheet in xl.sheet_names:
-        if 'gl' in sheet.lower() or 'general ledger' in sheet.lower() or 'historic' in sheet.lower():
-            gl_sheet = sheet
-            break
-    
-    if gl_sheet is None:
-        # Fall back to first sheet
-        gl_sheet = xl.sheet_names[0]
-    
-    df = pd.read_excel(xl, sheet_name=gl_sheet, header=None)
+    df = pd.read_excel(gl_file, sheet_name=0, header=None)
     
     accounts = {}
     all_transactions = []
@@ -612,33 +605,63 @@ def parse_workbook_gl(gl_file: str, account_map: Dict[str, AccountType]) -> Tupl
     current_account_type = AccountType.UNKNOWN
     
     # Find header row (contains "Date", "Transaction Type", etc.)
-    header_row = None
+    header_row = 4  # Default QBO position
     for i, row in df.iterrows():
-        row_str = ' '.join(str(v) for v in row.values)
-        if 'Date' in row_str and ('Transaction' in row_str or 'Type' in row_str):
+        row_values = [str(v) for v in row.values if pd.notna(v)]
+        row_str = ' '.join(row_values)
+        if 'Date' in row_str and 'Transaction' in row_str:
             header_row = i
             break
-    
-    if header_row is None:
-        header_row = 4  # Default position for these workbooks
     
     for i, row in df.iterrows():
         if i <= header_row:
             continue
-            
+        
         col0 = str(row[0]).strip() if pd.notna(row[0]) else ""
+        col1_raw = row[1]
         col1 = str(row[1]).strip() if pd.notna(row[1]) else ""
         
         # Skip empty rows
         if not col0 and not col1:
             continue
         
-        # Check if this is an account header (has value in col0, could be "Beginning Balance" in col1)
-        if col0 and col0 != "nan" and not col0.startswith("Total"):
-            # Check if col1 is empty or "Beginning Balance" - indicates account header
-            if pd.isna(row[1]) or col1 == "Beginning Balance" or col1 == "nan":
-                current_account = col0.strip()
-                # Look up type in mapping
+        # Skip "nan" strings
+        if col0 == "nan":
+            col0 = ""
+        if col1 == "nan":
+            col1 = ""
+        
+        # Check for "Total for X" - get the final balance
+        if col0.startswith("Total for "):
+            account_name = col0.replace("Total for ", "").strip()
+            # Skip sub-account totals
+            if "with sub-accounts" in account_name:
+                continue
+            if account_name in accounts:
+                # Balance is in the last column (typically col 9)
+                balance = None
+                for c in [9, 8, -1]:
+                    try:
+                        idx = c if c >= 0 else len(row) + c
+                        if idx < len(row) and pd.notna(row[idx]):
+                            balance = float(row[idx])
+                            break
+                    except:
+                        continue
+                if balance is not None:
+                    accounts[account_name].total = balance
+            continue
+        
+        # Check if this is an account header
+        # Account headers have: value in col0, nothing meaningful in col1 (or "Beginning Balance")
+        if col0 and not col0.startswith("Total"):
+            is_account_header = False
+            
+            if pd.isna(col1_raw) or col1 == "" or col1 == "Beginning Balance":
+                is_account_header = True
+            
+            if is_account_header:
+                current_account = col0
                 current_account_type = account_map.get(current_account, AccountType.UNKNOWN)
                 
                 # Try partial matching if exact match fails
@@ -658,56 +681,42 @@ def parse_workbook_gl(gl_file: str, account_map: Dict[str, AccountType]) -> Tupl
                     )
                 continue
         
-        # Check for "Total for X" - get the final balance
-        if col0.startswith("Total for "):
-            account_name = col0.replace("Total for ", "")
-            if "with sub-accounts" not in account_name and account_name in accounts:
-                # Balance is typically in the last numeric column
-                for c in range(len(row)-1, -1, -1):
-                    if pd.notna(row[c]) and str(row[c]) not in ('nan', ''):
-                        try:
-                            balance = float(row[c])
-                            accounts[account_name].total = balance
-                            break
-                        except:
-                            continue
-            continue
-        
-        # Transaction row: Date should be in col1 for these workbooks
-        if current_account and col1 and col1 != "nan" and col1 != "Beginning Balance":
-            date = col1
-            trans_type = str(row[2]) if pd.notna(row[2]) else ""
-            vendor = str(row[5]) if len(row) > 5 and pd.notna(row[5]) else ""
-            description = str(row[6]) if len(row) > 6 and pd.notna(row[6]) else ""
+        # Transaction row: has a date in col1
+        if current_account and col1 and col1 != "Beginning Balance":
+            # Parse date
+            date_str = col1
+            if hasattr(col1_raw, 'strftime'):
+                date_str = col1_raw.strftime('%m/%d/%Y')
             
-            # Amount is typically second-to-last column
+            # Get transaction details
+            vendor = str(row[5]).strip() if len(row) > 5 and pd.notna(row[5]) else ""
+            if vendor == "nan":
+                vendor = ""
+            description = str(row[6]).strip() if len(row) > 6 and pd.notna(row[6]) else ""
+            if description == "nan":
+                description = ""
+            
+            # Amount is in column 8
             amount = 0
-            for c in [8, 7, -2]:  # Try common positions
-                try:
-                    if len(row) > abs(c) and pd.notna(row[c]):
-                        amount = float(row[c])
-                        break
-                except:
-                    continue
+            try:
+                if len(row) > 8 and pd.notna(row[8]):
+                    amount = float(row[8])
+            except:
+                pass
             
-            if date and date != "nan":
-                # Clean up date format
-                if hasattr(date, 'strftime'):
-                    date = date.strftime('%Y-%m-%d')
-                
-                txn = Transaction(
-                    date=str(date),
-                    account=current_account,
-                    account_type=current_account_type,
-                    description=description,
-                    amount=amount,
-                    vendor=vendor
-                )
-                all_transactions.append(txn)
-                
-                if current_account in accounts:
-                    accounts[current_account].transactions.append(txn)
-                    accounts[current_account].transaction_count += 1
+            txn = Transaction(
+                date=date_str,
+                account=current_account,
+                account_type=current_account_type,
+                description=description,
+                amount=amount,
+                vendor=vendor
+            )
+            all_transactions.append(txn)
+            
+            if current_account in accounts:
+                accounts[current_account].transactions.append(txn)
+                accounts[current_account].transaction_count += 1
     
     return accounts, all_transactions
 
@@ -733,13 +742,8 @@ def run_ga_analysis(
     # Load mapping
     account_map = load_account_mapping(mapping_file)
     
-    # Try new workbook parser first, fall back to original
-    try:
-        accounts, transactions = parse_workbook_gl(gl_file, account_map)
-        if not accounts:
-            raise ValueError("No accounts found, trying original parser")
-    except Exception:
-        accounts, transactions = parse_gl_with_mapping(gl_file, account_map)
+    # Parse the GL using QBO format parser
+    accounts, transactions = parse_qbo_gl(gl_file, account_map)
     
     pnl, _ = build_financial_statements(accounts)
     
