@@ -165,8 +165,13 @@ def parse_pl_csv(file_path: str) -> PLStatement:
     parent_stack = []  # Track parent accounts for indentation
     
     # Temp storage for QBO calculated values (captured during parsing, assigned after statement creation)
+    qbo_total_income = {}
+    qbo_total_cogs = {}
+    qbo_total_expenses = {}
     qbo_gross_profit = {}
     qbo_net_operating_income = {}
+    qbo_total_other_income = {}
+    qbo_total_other_expense = {}
     qbo_net_income = {}
     
     for i in range(header_row + 1, len(df)):
@@ -195,23 +200,41 @@ def parse_pl_csv(file_path: str) -> PLStatement:
             continue
         
         # Capture QBO's calculated rows as source of truth (don't add as line items)
-        if account_name.lower() in ["gross profit", "net operating income", "net other income", "net income"]:
+        name_lower = account_name.lower()
+        
+        # Check for QBO total/summary rows
+        is_qbo_total = name_lower in [
+            "gross profit", "net operating income", "net other income", "net income",
+            "total for income", "total income", "total revenue",
+            "total for cost of goods sold", "total cost of goods sold", "total cogs",
+            "total for expenses", "total expenses", "total operating expenses",
+            "total for other income", "total other income",
+            "total for other expense", "total other expense", "total other expenses"
+        ]
+        
+        if is_qbo_total:
             monthly_values = {}
             for j, month in enumerate(months):
                 if j + 1 < len(row):
                     monthly_values[month] = parse_currency(row.iloc[j + 1])
             
-            # Store QBO's calculated values in temp variables (assigned to statement after creation)
-            name_lower = account_name.lower()
+            # Store QBO's values in temp variables (assigned to statement after creation)
             if name_lower == "gross profit":
                 qbo_gross_profit = monthly_values
             elif name_lower == "net operating income":
                 qbo_net_operating_income = monthly_values
-            elif name_lower == "net other income":
-                # This is already net (Other Income - Other Expense)
-                pass  # We'll derive this from other_income - other_expense
             elif name_lower == "net income":
                 qbo_net_income = monthly_values
+            elif name_lower in ["total for income", "total income", "total revenue"]:
+                qbo_total_income = monthly_values
+            elif name_lower in ["total for cost of goods sold", "total cost of goods sold", "total cogs"]:
+                qbo_total_cogs = monthly_values
+            elif name_lower in ["total for expenses", "total expenses", "total operating expenses"]:
+                qbo_total_expenses = monthly_values
+            elif name_lower in ["total for other income", "total other income"]:
+                qbo_total_other_income = monthly_values
+            elif name_lower in ["total for other expense", "total other expense", "total other expenses"]:
+                qbo_total_other_expense = monthly_values
             continue
         
         # Parse monthly values
@@ -268,7 +291,17 @@ def parse_pl_csv(file_path: str) -> PLStatement:
         line_items=line_items
     )
     
-    # Assign QBO's calculated values (source of truth from the P&L report)
+    # Assign QBO's values (source of truth from the P&L report)
+    if qbo_total_income:
+        statement.total_income = qbo_total_income
+    if qbo_total_cogs:
+        statement.total_cogs = qbo_total_cogs
+    if qbo_total_expenses:
+        statement.total_expenses = qbo_total_expenses
+    if qbo_total_other_income:
+        statement.total_other_income = qbo_total_other_income
+    if qbo_total_other_expense:
+        statement.total_other_expense = qbo_total_other_expense
     if qbo_gross_profit:
         statement.gross_profit = qbo_gross_profit
     if qbo_net_operating_income:
@@ -276,55 +309,127 @@ def parse_pl_csv(file_path: str) -> PLStatement:
     if qbo_net_income:
         statement.net_income = qbo_net_income
     
-    # Calculate section totals from line items
+    # Calculate section totals (only for values not already set from QBO)
     calculate_section_totals(statement)
+    
+    # Validate that totals match expected P&L relationships
+    validation_errors = validate_pl_totals(statement)
+    if validation_errors:
+        # Log errors but don't fail - the QBO values are the source of truth
+        print(f"P&L validation warnings: {validation_errors}")
     
     return statement
 
 
 def calculate_section_totals(statement: PLStatement) -> None:
-    """Calculate totals for each P&L section by month"""
+    """
+    Calculate/validate totals for each P&L section by month.
+    Uses QBO totals as source of truth if available, falls back to summing line items.
+    """
     months = statement.months[:-1] if statement.months and statement.months[-1].lower() == "total" else statement.months
+    all_months = months + ["Total"]
     
-    # Initialize totals
-    for month in months + ["Total"]:
-        statement.total_income[month] = 0
-        statement.total_cogs[month] = 0
-        statement.total_expenses[month] = 0
-        statement.total_other_income[month] = 0
-        statement.total_other_expense[month] = 0
+    # Only calculate from line items if we don't have QBO totals
+    # (QBO totals are already set before this function is called)
+    has_qbo_income = bool(statement.total_income)
+    has_qbo_cogs = bool(statement.total_cogs)
+    has_qbo_expenses = bool(statement.total_expenses)
+    has_qbo_other_income = bool(statement.total_other_income)
+    has_qbo_other_expense = bool(statement.total_other_expense)
     
-    # Sum up line items (only non-total rows to avoid double counting)
-    for item in statement.line_items:
-        if item.is_total_row:
-            continue
+    # If we don't have QBO totals, calculate from line items
+    if not has_qbo_income or not has_qbo_expenses:
+        calculated_income = {m: 0 for m in all_months}
+        calculated_cogs = {m: 0 for m in all_months}
+        calculated_expenses = {m: 0 for m in all_months}
+        calculated_other_income = {m: 0 for m in all_months}
+        calculated_other_expense = {m: 0 for m in all_months}
         
-        for month, value in item.monthly_values.items():
-            if item.section == PLSection.INCOME:
-                statement.total_income[month] = statement.total_income.get(month, 0) + value
-            elif item.section == PLSection.COGS:
-                statement.total_cogs[month] = statement.total_cogs.get(month, 0) + value
-            elif item.section == PLSection.EXPENSES:
-                statement.total_expenses[month] = statement.total_expenses.get(month, 0) + value
-            elif item.section == PLSection.OTHER_INCOME:
-                statement.total_other_income[month] = statement.total_other_income.get(month, 0) + value
-            elif item.section == PLSection.OTHER_EXPENSE:
-                statement.total_other_expense[month] = statement.total_other_expense.get(month, 0) + value
+        for item in statement.line_items:
+            if item.is_total_row:
+                continue
+            
+            for month, value in item.monthly_values.items():
+                if item.section == PLSection.INCOME:
+                    calculated_income[month] = calculated_income.get(month, 0) + value
+                elif item.section == PLSection.COGS:
+                    calculated_cogs[month] = calculated_cogs.get(month, 0) + value
+                elif item.section == PLSection.EXPENSES:
+                    calculated_expenses[month] = calculated_expenses.get(month, 0) + value
+                elif item.section == PLSection.OTHER_INCOME:
+                    calculated_other_income[month] = calculated_other_income.get(month, 0) + value
+                elif item.section == PLSection.OTHER_EXPENSE:
+                    calculated_other_expense[month] = calculated_other_expense.get(month, 0) + value
+        
+        # Only use calculated values if QBO values aren't set
+        if not has_qbo_income:
+            statement.total_income = calculated_income
+        if not has_qbo_cogs:
+            statement.total_cogs = calculated_cogs
+        if not has_qbo_expenses:
+            statement.total_expenses = calculated_expenses
+        if not has_qbo_other_income:
+            statement.total_other_income = calculated_other_income
+        if not has_qbo_other_expense:
+            statement.total_other_expense = calculated_other_expense
     
-    # Calculate derived totals ONLY if not already populated from QBO's calculated rows
-    for month in list(statement.total_income.keys()):
-        # Use QBO's Gross Profit if available, otherwise calculate
+    # Calculate derived totals ONLY if not already populated from QBO
+    for month in all_months:
+        # Gross Profit
         if month not in statement.gross_profit:
             statement.gross_profit[month] = statement.total_income.get(month, 0) - statement.total_cogs.get(month, 0)
         
-        # Use QBO's Net Operating Income if available, otherwise calculate  
+        # Net Operating Income
         if month not in statement.net_operating_income:
             statement.net_operating_income[month] = statement.gross_profit.get(month, 0) - statement.total_expenses.get(month, 0)
         
-        # Use QBO's Net Income if available, otherwise calculate
+        # Net Income
         if month not in statement.net_income:
             net_other = statement.total_other_income.get(month, 0) - statement.total_other_expense.get(month, 0)
             statement.net_income[month] = statement.net_operating_income.get(month, 0) + net_other
+
+
+def validate_pl_totals(statement: PLStatement) -> list:
+    """
+    Validate that P&L totals match expected relationships.
+    Returns list of validation errors (empty if all valid).
+    """
+    errors = []
+    
+    # Check for Total column
+    total_key = "Total" if "Total" in statement.total_income else None
+    if not total_key:
+        return errors  # Can't validate without Total column
+    
+    # Get totals
+    income = statement.total_income.get(total_key, 0)
+    cogs = statement.total_cogs.get(total_key, 0)
+    gross_profit = statement.gross_profit.get(total_key, 0)
+    expenses = statement.total_expenses.get(total_key, 0)
+    net_op_income = statement.net_operating_income.get(total_key, 0)
+    other_income = statement.total_other_income.get(total_key, 0)
+    other_expense = statement.total_other_expense.get(total_key, 0)
+    net_income = statement.net_income.get(total_key, 0)
+    
+    # Tolerance for rounding (1 cent)
+    tol = 0.01
+    
+    # Validate: Gross Profit = Income - COGS
+    expected_gp = income - cogs
+    if abs(gross_profit - expected_gp) > tol:
+        errors.append(f"Gross Profit mismatch: got ${gross_profit:,.2f}, expected ${expected_gp:,.2f} (Income ${income:,.2f} - COGS ${cogs:,.2f})")
+    
+    # Validate: Net Operating Income = Gross Profit - Expenses
+    expected_noi = gross_profit - expenses
+    if abs(net_op_income - expected_noi) > tol:
+        errors.append(f"Net Operating Income mismatch: got ${net_op_income:,.2f}, expected ${expected_noi:,.2f} (Gross Profit ${gross_profit:,.2f} - Expenses ${expenses:,.2f})")
+    
+    # Validate: Net Income = Net Operating Income + Other Income - Other Expense
+    expected_ni = net_op_income + other_income - other_expense
+    if abs(net_income - expected_ni) > tol:
+        errors.append(f"Net Income mismatch: got ${net_income:,.2f}, expected ${expected_ni:,.2f}")
+    
+    return errors
 
 
 def get_monthly_dataframe(statement: PLStatement, section: Optional[PLSection] = None) -> pd.DataFrame:

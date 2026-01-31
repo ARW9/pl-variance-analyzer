@@ -1845,7 +1845,7 @@ def render_analysis(analysis, is_demo=False, pnl_data=None, transactions=None, a
     st.divider()
     
     # Tabs
-    tab1, tab2, tab3, tab4, tab5 = st.tabs(["📖 How to Use This Data", "🚨 Anomalies", "📊 Volatile", "✓ Consistent", "🏢 Vendors"])
+    tab1, tab2, tab3, tab4 = st.tabs(["📖 How to Use This Data", "🚨 Anomalies", "📊 Volatile", "✓ Consistent"])
     
     with tab1:
         st.subheader("Understanding Your Numbers")
@@ -1946,12 +1946,6 @@ Expenses that are predictable and stable.
         else:
             st.info("No consistently stable expenses identified.")
     
-    with tab5:
-        st.subheader("Top Vendors by Spend")
-        vendors_data = [{"Vendor": v.name, "Total Spend": v.total_spend, "Transactions": v.transaction_count, "Avg Transaction": v.avg_transaction, "Recurring": "🔄 Yes" if v.is_recurring else "No"} for v in analysis.top_vendors[:20] if v.name != "Unknown"]
-        if vendors_data:
-            df = pd.DataFrame(vendors_data)
-            st.dataframe(df, column_config={"Total Spend": st.column_config.NumberColumn(format="$%.2f"), "Avg Transaction": st.column_config.NumberColumn(format="$%.2f")}, hide_index=True, use_container_width=True)
     # Monthly trend
     st.divider()
     st.header("📅 Monthly Expense Trend")
