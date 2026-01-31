@@ -387,6 +387,8 @@ with st.sidebar:
         **Free:** 3 uploads  
         **Pro:** $10/month unlimited
         """)
+    
+    st.markdown("*📖 More questions? See FAQs at the bottom of the page*")
 
 
 def save_uploaded_file(uploaded_file) -> str:
