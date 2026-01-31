@@ -1514,6 +1514,19 @@ def render_analysis(analysis, is_demo=False, pnl_data=None, transactions=None, a
         if pnl_data:
             st.write(f"**pnl_data Revenue:** ${sum(pnl_data.get('Revenue', {}).values()):,.2f}")
             st.write(f"**pnl_data Expenses:** ${sum(pnl_data.get('Expenses', {}).values()):,.2f}")
+        
+        # Show transaction account types distribution
+        if transactions:
+            from collections import Counter
+            type_counts = Counter(str(t.account_type) for t in transactions)
+            st.write("**Transaction account types:**")
+            for typ, count in type_counts.most_common():
+                st.write(f"  {typ}: {count}")
+            
+            # Check enum identity
+            from coa_parser import AccountType as COA_AccountType
+            from gl_analyzer import AccountType as GL_AccountType
+            st.write(f"**Enum check:** COA==GL? {COA_AccountType.EXPENSE == GL_AccountType.EXPENSE}")
     
     col1, col2, col3, col4 = st.columns(4)
     
