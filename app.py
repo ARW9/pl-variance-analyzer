@@ -2112,6 +2112,24 @@ if analyze_btn and pl_file and user:
             # Show validation info
             st.success(f"✓ P&L parsed: {statement.company_name} | {statement.date_range} | {len(statement.line_items)} accounts")
             
+            # Debug: Show QBO totals that were parsed
+            with st.expander("🔧 Debug: Parsed QBO Totals", expanded=True):
+                st.write("**These values come directly from the P&L rows:**")
+                st.write(f"- Total Income: ${summary['totals'].get('revenue', 0):,.2f}")
+                st.write(f"- Total COGS: ${summary['totals'].get('cogs', 0):,.2f}")
+                st.write(f"- Gross Profit: ${summary['totals'].get('gross_profit', 0):,.2f}")
+                st.write(f"- Total Expenses: ${summary['totals'].get('expenses', 0):,.2f}")
+                st.write(f"- **Operating Income: ${summary['totals'].get('operating_income', 0):,.2f}**")
+                st.write(f"- Other Income: ${summary['totals'].get('other_income', 0):,.2f}")
+                st.write(f"- Other Expense: ${summary['totals'].get('other_expense', 0):,.2f}")
+                st.write(f"- Net Income: ${summary['totals'].get('net_income', 0):,.2f}")
+                st.write("---")
+                st.write("**Expected (calculated):**")
+                calc_gp = summary['totals'].get('revenue', 0) - summary['totals'].get('cogs', 0)
+                calc_oi = summary['totals'].get('gross_profit', 0) - summary['totals'].get('expenses', 0)
+                st.write(f"- Gross Profit (Revenue - COGS): ${calc_gp:,.2f}")
+                st.write(f"- Operating Income (GP - Expenses): ${calc_oi:,.2f}")
+            
             # Convert P&L statement to GAAnalysis format for existing render_analysis
             totals = summary['totals']
             monthly = summary.get('monthly', {})

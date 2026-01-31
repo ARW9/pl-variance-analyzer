@@ -204,7 +204,7 @@ def parse_pl_csv(file_path: str) -> PLStatement:
         
         # Check for QBO total/summary rows
         is_qbo_total = name_lower in [
-            "gross profit", "net operating income", "net other income", "net income",
+            "gross profit", "net operating income", "operating income", "net other income", "net income",
             "total for income", "total income", "total revenue",
             "total for cost of goods sold", "total cost of goods sold", "total cogs",
             "total for expenses", "total expenses", "total operating expenses",
@@ -221,7 +221,7 @@ def parse_pl_csv(file_path: str) -> PLStatement:
             # Store QBO's values in temp variables (assigned to statement after creation)
             if name_lower == "gross profit":
                 qbo_gross_profit = monthly_values
-            elif name_lower == "net operating income":
+            elif name_lower in ["net operating income", "operating income"]:
                 qbo_net_operating_income = monthly_values
             elif name_lower == "net income":
                 qbo_net_income = monthly_values
