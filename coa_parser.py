@@ -139,9 +139,10 @@ def parse_qbo_coa(file_path: str) -> Dict[str, AccountType]:
                     return col
         return None
     
-    # Find the name and type columns with multiple fallbacks
+    # Find the name, type, and number columns with multiple fallbacks
     name_col = find_col(['full name', 'account name', 'name', 'account'])
     type_col = find_col(['account type', 'type'])
+    number_col = find_col(['number', 'account number', 'acct #', 'no.', 'account #'])
     
     # If we still can't find columns, try positional guessing
     if not name_col:
@@ -170,6 +171,13 @@ def parse_qbo_coa(file_path: str) -> Dict[str, AccountType]:
             name = str(row[name_col]).strip() if pd.notna(row[name_col]) else ""
             qbo_type = str(row[type_col]).strip() if pd.notna(row[type_col]) else ""
             
+            # Get account number if present
+            acct_number = ""
+            if number_col and pd.notna(row.get(number_col)):
+                acct_number = str(row[number_col]).strip()
+                if acct_number == "nan":
+                    acct_number = ""
+            
             if name and name != "nan" and qbo_type and qbo_type != "nan":
                 # Map QBO type to our AccountType
                 account_type = QBO_TYPE_MAP.get(qbo_type, AccountType.UNKNOWN)
@@ -181,7 +189,15 @@ def parse_qbo_coa(file_path: str) -> Dict[str, AccountType]:
                             account_type = mapped_type
                             break
                 
+                # Add the plain name
                 account_map[name] = account_type
+                
+                # Also add with account number prefix (for GL matching)
+                # QBO formats: "1000 Account Name" or "1000-Account Name"
+                if acct_number:
+                    account_map[f"{acct_number} {name}"] = account_type
+                    account_map[f"{acct_number}-{name}"] = account_type
+                    account_map[f"{acct_number}  {name}"] = account_type  # double space variant
         except:
             continue
     

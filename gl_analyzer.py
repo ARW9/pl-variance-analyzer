@@ -149,13 +149,33 @@ def parse_gl_with_mapping(gl_file: str, account_map: Dict[str, AccountType], dat
                 
                 # Try smarter matching if exact match fails
                 if current_account_type == AccountType.UNKNOWN:
-                    for mapped_name, mapped_type in account_map.items():
-                        if mapped_name.endswith(":" + current_account) or mapped_name == current_account:
-                            current_account_type = mapped_type
-                            break
+                    # Try stripping account number prefix (e.g., "1000 Rent" -> "Rent")
+                    import re
+                    stripped_name = re.sub(r'^\d+[\s\-]+', '', current_account).strip()
+                    if stripped_name and stripped_name != current_account:
+                        current_account_type = account_map.get(stripped_name, AccountType.UNKNOWN)
+                    
+                    # Try matching with parent:child format
+                    if current_account_type == AccountType.UNKNOWN:
+                        for mapped_name, mapped_type in account_map.items():
+                            if mapped_name.endswith(":" + current_account) or mapped_name == current_account:
+                                current_account_type = mapped_type
+                                break
+                    
+                    # Try case-insensitive parent:child matching
                     if current_account_type == AccountType.UNKNOWN:
                         for mapped_name, mapped_type in account_map.items():
                             if mapped_name.lower().endswith(":" + current_account.lower()):
+                                current_account_type = mapped_type
+                                break
+                    
+                    # Try matching stripped name with parent:child format
+                    if current_account_type == AccountType.UNKNOWN and stripped_name:
+                        for mapped_name, mapped_type in account_map.items():
+                            if mapped_name.endswith(":" + stripped_name) or mapped_name == stripped_name:
+                                current_account_type = mapped_type
+                                break
+                            if mapped_name.lower().endswith(":" + stripped_name.lower()):
                                 current_account_type = mapped_type
                                 break
                 
