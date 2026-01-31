@@ -2109,22 +2109,74 @@ if analyze_btn and pl_file and user:
             totals = summary['totals']
             monthly = summary.get('monthly', {})
             
-            # Build expense categories from P&L line items
+            # Build expense categories from P&L line items with variance analysis
+            import numpy as np
+            
+            # Keywords that indicate expenses should be consistent month-to-month
+            CONSISTENT_KEYWORDS = ['rent', 'lease', 'insurance', 'salary', 'subscription', 'license', 'permit', 'depreciation']
+            
             expense_items = [item for item in statement.line_items 
                            if item.section == PLSection.EXPENSES and not item.is_total_row and item.total != 0]
             
             categories = []
+            insights = []
+            recommendations = []
+            
             for item in sorted(expense_items, key=lambda x: abs(x.total), reverse=True):
+                # Get monthly values (excluding Total column)
+                monthly_vals = [item.monthly_values.get(m, 0) for m in statement.months if m.lower() != 'total']
+                # Filter out zero months for analysis (account may not exist all year)
+                non_zero_vals = [v for v in monthly_vals if v != 0]
+                
+                # Calculate statistics
+                if len(non_zero_vals) >= 2:
+                    monthly_avg = np.mean(non_zero_vals)
+                    monthly_std = np.std(non_zero_vals)
+                    cv = (monthly_std / abs(monthly_avg)) if monthly_avg != 0 else 0
+                else:
+                    monthly_avg = non_zero_vals[0] if non_zero_vals else 0
+                    monthly_std = 0
+                    cv = 0
+                
+                # Check if this expense should be consistent
+                name_lower = item.name.lower()
+                consistency_expected = any(kw in name_lower for kw in CONSISTENT_KEYWORDS)
+                
+                # Flag anomalies: expected to be consistent but has high variance
+                is_consistent = cv < 0.15  # Less than 15% variance
+                has_anomaly = consistency_expected and not is_consistent and cv > 0.30
+                
                 cat = ExpenseCategory(
                     name=item.name,
                     total=item.total,
                     pct_of_total_expenses=(item.total / totals['expenses'] * 100) if totals['expenses'] else 0,
                     pct_of_revenue=(item.total / totals['revenue'] * 100) if totals['revenue'] else 0,
-                    transaction_count=0,  # Not available from P&L
-                    avg_transaction=0,
-                    monthly_trend={m: item.monthly_values.get(m, 0) for m in statement.months if m.lower() != 'total'}
+                    transaction_count=len(non_zero_vals),  # Months with activity
+                    avg_transaction=monthly_avg,
+                    monthly_trend={m: item.monthly_values.get(m, 0) for m in statement.months if m.lower() != 'total'},
+                    monthly_avg=monthly_avg,
+                    monthly_std=monthly_std,
+                    coefficient_of_variation=cv,
+                    is_consistent=is_consistent,
+                    consistency_expected=consistency_expected,
+                    has_anomaly=has_anomaly
                 )
                 categories.append(cat)
+                
+                # Generate insights for anomalies
+                if has_anomaly:
+                    insights.append(f"⚠️ **{item.name}** shows unexpected variance ({cv:.0%}) - typically this should be consistent")
+                elif cv > 0.50 and item.total > totals['expenses'] * 0.05:
+                    insights.append(f"📊 **{item.name}** is highly variable ({cv:.0%} variance) - review for optimization opportunities")
+            
+            # Add general insights
+            if totals['expenses'] / totals['revenue'] > 0.40:
+                insights.append(f"💰 Operating expenses are {totals['expenses']/totals['revenue']*100:.1f}% of revenue - above typical 30-40% range")
+                recommendations.append("Review top expense categories for cost reduction opportunities")
+            
+            if totals['gross_profit'] / totals['revenue'] < 0.30:
+                insights.append(f"📉 Gross margin is {totals['gross_profit']/totals['revenue']*100:.1f}% - below healthy 30%+ threshold")
+                recommendations.append("Analyze COGS components and pricing strategy")
             
             # Build monthly expense totals
             monthly_totals = {}
@@ -2138,15 +2190,15 @@ if analyze_btn and pl_file and user:
                 ga_as_pct_of_revenue=(totals['expenses'] / totals['revenue'] * 100) if totals['revenue'] else 0,
                 categories=categories,
                 top_vendors=[],  # Requires GL data
-                fixed_costs=0,
-                variable_costs=totals['expenses'],
+                fixed_costs=sum(c.total for c in categories if c.consistency_expected),
+                variable_costs=sum(c.total for c in categories if not c.consistency_expected),
                 discretionary_costs=0,
                 essential_costs=totals['expenses'],
                 unknown_vendors_total=0,
                 unknown_vendors_count=0,
                 monthly_totals=monthly_totals,
-                insights=[],
-                recommendations=[]
+                insights=insights,
+                recommendations=recommendations
             )
             
             # Build P&L data structure for render_analysis (needs account-level breakdown)
