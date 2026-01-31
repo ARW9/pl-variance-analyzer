@@ -602,10 +602,6 @@ with st.sidebar:
             """)
         
         st.markdown("*📖 More questions? See FAQs at the bottom of the page*")
-        
-        st.divider()
-        st.caption("🔒 Privacy Policy · 📜 Terms of Service")
-        st.caption("See full policies at bottom of main page")
     
     else:
         st.info("👈 Sign in on the main page to start analyzing")
@@ -632,10 +628,6 @@ with st.sidebar:
             """)
         
         st.markdown("*📖 More questions? See FAQs at the bottom of the page*")
-        
-        st.divider()
-        st.caption("🔒 Privacy Policy · 📜 Terms of Service")
-        st.caption("See full policies at bottom of main page")
 
 
 def save_uploaded_file(uploaded_file) -> str:
@@ -2546,8 +2538,3 @@ if user:
                 if st.button("Cancel", use_container_width=True):
                     st.session_state['confirm_delete'] = False
                     st.rerun()
-    
-    # Privacy/TOS links in sidebar
-    st.sidebar.divider()
-    st.sidebar.caption("🔒 Privacy Policy · 📜 Terms of Service")
-    st.sidebar.caption("See full policies at bottom of main page")

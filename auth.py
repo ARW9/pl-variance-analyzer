@@ -22,6 +22,113 @@ def init_stripe():
 FREE_ANALYSES = 3
 PRO_PRICE = 1000  # $10.00 in cents
 
+def render_legal_expanders():
+    """Render Privacy Policy and Terms of Service expanders"""
+    with st.expander("🔒 Privacy Policy", expanded=False):
+        st.markdown("""
+**Privacy Policy — P&L Variance Analyzer**
+
+*Last updated: January 31, 2026*
+
+---
+
+**1. Information We Collect**
+
+**Information you provide:**
+• Email address (required for authentication)
+• Payment information (processed by Stripe — we never see card details)
+
+**Information we do NOT collect or store:**
+• Your uploaded financial files (processed in-memory, immediately deleted)
+• Account names, vendor names, or transaction details from your P&L
+• QuickBooks credentials or API access
+
+---
+
+**2. How We Use Your Information**
+
+• **Email:** Authentication, account management, important service updates
+• **Usage metrics:** Enforce free tier limits, improve the product
+• **Payment info:** Process subscriptions via Stripe
+
+We do NOT use your data for advertising, marketing, or sale to third parties.
+
+---
+
+**3. Data Processing & Security**
+
+• All uploads are processed in isolated, ephemeral containers
+• Files exist only in memory during analysis (typically <30 seconds)
+• No financial data is written to disk or database
+• All connections encrypted via TLS 1.3
+
+---
+
+**4. Your Rights**
+
+You have the right to:
+• **Access** your data (email alex@williamson.nu)
+• **Delete** your account and data (48-hour processing)
+• **Export** your account data
+
+---
+
+**5. Contact**
+
+📧 alex@williamson.nu
+        """)
+    
+    with st.expander("📜 Terms of Service", expanded=False):
+        st.markdown("""
+**Terms of Service — P&L Variance Analyzer**
+
+*Last updated: January 31, 2026*
+
+---
+
+**1. Service Description**
+
+P&L Variance Analyzer analyzes Profit & Loss exports from QuickBooks Online to identify expense anomalies and variances. The analysis is for informational purposes only.
+
+---
+
+**2. Acceptable Use**
+
+You agree to:
+• Upload only files you have authorization to analyze
+• Not attempt to access other users' data or sessions
+• Not use the service for any illegal purpose
+
+---
+
+**3. Data Ownership**
+
+• **Your data remains yours.** We claim no ownership of your uploaded files.
+• Analysis results are provided for your use only.
+• We do not retain, sell, or share your financial data.
+
+---
+
+**4. Limitation of Liability**
+
+• This tool provides analysis, not financial advice
+• Verify all figures against your source documents
+• We are not liable for decisions made based on this analysis
+
+---
+
+**5. Payments & Refunds**
+
+• Free tier: 3 analyses, no payment required
+• Pro plan: $10/month, cancel anytime
+
+---
+
+**6. Contact**
+
+📧 alex@williamson.nu
+        """)
+
 def is_valid_email(email: str) -> bool:
     pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
     return re.match(pattern, email) is not None
@@ -273,6 +380,10 @@ def render_auth_ui():
         send_verification_email(email, code)
         st.rerun()
     
+    # Show legal info on login page
+    st.markdown("---")
+    render_legal_expanders()
+    
     return None
 
 def render_usage_banner(user: dict):
@@ -305,6 +416,10 @@ def render_upgrade_cta(user: dict):
                 st.components.v1.html(f'<script>window.open("{checkout_url}", "_blank");</script>', height=0)
             except Exception as e:
                 st.error(f"Error creating checkout: {str(e)}")
+    
+    # Show legal info below upgrade CTA
+    st.markdown("---")
+    render_legal_expanders()
 
 def render_paywall():
     """Show paywall when free tier exhausted"""
