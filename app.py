@@ -761,44 +761,45 @@ def get_demo_analysis():
     )
 
 
+def detect_dayfirst(transactions: list) -> bool:
+    """Detect if transaction dates use day-first format (DD/MM/YYYY)"""
+    for txn in transactions[:50]:  # Check first 50
+        date_str = str(txn.date if hasattr(txn, 'date') else txn.get('date', ''))
+        if '/' in date_str:
+            parts = date_str.split('/')
+            if len(parts) >= 2 and parts[0].isdigit():
+                first_num = int(parts[0])
+                if first_num > 12:  # Must be a day
+                    return True
+    return False
+
+
 def extract_months_from_transactions(transactions: list) -> list:
     """Extract unique months from transaction dates"""
     months = set()
+    dayfirst = detect_dayfirst(transactions)
+    
     for txn in transactions:
         try:
             date_str = txn.date if hasattr(txn, 'date') else txn.get('date', '')
             date_str = str(date_str).strip()
             
-            # Try pandas to parse any date format
+            # If already in YYYY-MM-DD format, extract directly
+            if len(date_str) >= 10 and date_str[4] == '-' and date_str[7] == '-':
+                month_key = date_str[:7]
+                if 1 <= int(month_key.split('-')[1]) <= 12:
+                    months.add(month_key)
+                continue
+            
+            # Try pandas to parse with detected format
             try:
-                parsed = pd.to_datetime(date_str, dayfirst=False)
+                parsed = pd.to_datetime(date_str, dayfirst=dayfirst)
                 month_key = parsed.strftime("%Y-%m")
                 months.add(month_key)
                 continue
             except:
                 pass
             
-            # Fallback: manual parsing for common formats
-            if '/' in date_str:
-                parts = date_str.split('/')
-                if len(parts) >= 3:
-                    # Try MM/DD/YYYY
-                    if len(parts[2]) == 4:
-                        month_key = f"{parts[2]}-{parts[0].zfill(2)}"
-                    # Try DD/MM/YYYY or YYYY/MM/DD
-                    elif len(parts[0]) == 4:
-                        month_key = f"{parts[0]}-{parts[1].zfill(2)}"
-                    else:
-                        continue
-                    # Validate the month
-                    if 1 <= int(month_key.split('-')[1]) <= 12:
-                        months.add(month_key)
-            elif '-' in date_str:
-                month_key = date_str[:7]
-                # Validate
-                parts = month_key.split('-')
-                if len(parts) == 2 and len(parts[0]) == 4 and 1 <= int(parts[1]) <= 12:
-                    months.add(month_key)
         except:
             pass
     return sorted(months)
@@ -807,38 +808,27 @@ def extract_months_from_transactions(transactions: list) -> list:
 def filter_transactions_by_month(transactions: list, month: str) -> list:
     """Filter transactions to a specific month (YYYY-MM format)"""
     filtered = []
+    dayfirst = detect_dayfirst(transactions)
+    
     for txn in transactions:
         try:
             date_str = txn.date if hasattr(txn, 'date') else txn.get('date', '')
             date_str = str(date_str).strip()
             
-            # Use pandas for consistent date parsing
+            # If already in YYYY-MM-DD format, match directly
+            if len(date_str) >= 10 and date_str[4] == '-' and date_str[7] == '-':
+                if date_str[:7] == month:
+                    filtered.append(txn)
+                continue
+            
+            # Use pandas for consistent date parsing with detected format
             try:
-                parsed = pd.to_datetime(date_str, dayfirst=False)
+                parsed = pd.to_datetime(date_str, dayfirst=dayfirst)
                 txn_month = parsed.strftime("%Y-%m")
                 if txn_month == month:
                     filtered.append(txn)
-                continue
             except:
                 pass
-            
-            # Fallback: manual parsing
-            if '/' in date_str:
-                parts = date_str.split('/')
-                if len(parts) >= 3:
-                    # MM/DD/YYYY
-                    if len(parts[2]) == 4:
-                        txn_month = f"{parts[2]}-{parts[0].zfill(2)}"
-                    # YYYY/MM/DD
-                    elif len(parts[0]) == 4:
-                        txn_month = f"{parts[0]}-{parts[1].zfill(2)}"
-                    else:
-                        continue
-                    if txn_month == month:
-                        filtered.append(txn)
-            elif '-' in date_str:
-                if date_str[:7] == month:
-                    filtered.append(txn)
         except:
             pass
     return filtered
@@ -1278,6 +1268,9 @@ def render_analysis(analysis, is_demo=False, pnl_data=None, transactions=None, a
         with st.expander("🔧 Debug: Transaction Data", expanded=False):
             st.write(f"**Total transactions:** {len(transactions)}")
             if transactions:
+                dayfirst = detect_dayfirst(transactions)
+                st.write(f"**Date format detected:** {'DD/MM/YYYY (day-first)' if dayfirst else 'MM/DD/YYYY (month-first)'}")
+                
                 sample_dates = [t.date for t in transactions[:10]]
                 st.write(f"**Sample dates (first 10):** {sample_dates}")
                 
@@ -1287,8 +1280,13 @@ def render_analysis(analysis, is_demo=False, pnl_data=None, transactions=None, a
                 unparseable = []
                 for t in transactions:
                     try:
-                        parsed = pd.to_datetime(t.date, dayfirst=False)
-                        month_counts[parsed.strftime("%Y-%m")] += 1
+                        d = str(t.date)
+                        # Handle already-normalized dates
+                        if len(d) >= 10 and d[4] == '-':
+                            month_counts[d[:7]] += 1
+                        else:
+                            parsed = pd.to_datetime(t.date, dayfirst=dayfirst)
+                            month_counts[parsed.strftime("%Y-%m")] += 1
                     except:
                         unparseable.append(t.date)
                 

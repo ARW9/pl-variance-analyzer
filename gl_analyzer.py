@@ -9,21 +9,11 @@ import json
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional
 from dataclasses import dataclass
-from enum import Enum
 import requests
 import os
 
-
-class AccountType(Enum):
-    ASSET = "Asset"
-    LIABILITY = "Liability"
-    EQUITY = "Equity"
-    REVENUE = "Revenue"
-    COGS = "Cost of Goods Sold"
-    EXPENSE = "Expense"
-    OTHER_INCOME = "Other Income"
-    OTHER_EXPENSE = "Other Expense"
-    UNKNOWN = "Unknown"
+# Import AccountType from coa_parser to ensure single enum definition
+from coa_parser import AccountType
 
 
 @dataclass
@@ -52,6 +42,26 @@ def load_account_mapping(mapping_file: str) -> Dict[str, AccountType]:
     return {k: AccountType(v) for k, v in data.items()}
 
 
+def detect_date_format(df, date_col=1) -> bool:
+    """
+    Detect if dates are in day-first format (DD/MM/YYYY) or month-first (MM/DD/YYYY).
+    Returns True if day-first format detected.
+    """
+    for i, row in df.iterrows():
+        if i < 5:  # Skip header rows
+            continue
+        if pd.notna(row[date_col]):
+            date_str = str(row[date_col]).strip()
+            if '/' in date_str:
+                parts = date_str.split('/')
+                if len(parts) >= 2:
+                    first_num = int(parts[0]) if parts[0].isdigit() else 0
+                    # If first number > 12, it must be a day (DD/MM/YYYY)
+                    if first_num > 12:
+                        return True
+    return False  # Default to MM/DD/YYYY
+
+
 def parse_gl_with_mapping(gl_file: str, account_map: Dict[str, AccountType]) -> Tuple[Dict[str, AccountSummary], List[Transaction]]:
     """
     Parse GL using CoA mapping for accurate classification
@@ -62,6 +72,9 @@ def parse_gl_with_mapping(gl_file: str, account_map: Dict[str, AccountType]) -> 
     to both parent and child accounts.
     """
     df = pd.read_excel(gl_file, sheet_name=0, header=None)
+    
+    # Detect date format
+    dayfirst = detect_date_format(df)
     
     accounts = {}
     all_transactions = []
@@ -166,7 +179,8 @@ def parse_gl_with_mapping(gl_file: str, account_map: Dict[str, AccountType]) -> 
                             date = date_val.strftime('%Y-%m-%d')
                         else:
                             # Parse string dates with pandas and normalize
-                            parsed = pd.to_datetime(date_val, dayfirst=False)
+                            # Use detected dayfirst setting
+                            parsed = pd.to_datetime(date_val, dayfirst=dayfirst)
                             date = parsed.strftime('%Y-%m-%d')
                     except:
                         # Fallback: keep original string
