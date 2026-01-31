@@ -1120,8 +1120,8 @@ def render_pnl_comparison(pnl_current: dict, pnl_prior: dict, label_current: str
         sorted_accounts = sorted(all_accounts, key=lambda x: x.lower())
         
         for acct in sorted_accounts:
-            curr = abs(current_data.get(acct, 0))
-            prior = abs(prior_data.get(acct, 0))
+            curr = current_data.get(acct, 0)
+            prior = prior_data.get(acct, 0)
             var_amt, var_pct = format_variance(curr, prior)
             
             # Color code significant variances
@@ -1407,7 +1407,7 @@ def render_pnl(pnl_data: dict, title: str = "📊 Profit & Loss Statement"):
     # Revenue
     rows.append({"Account": "**REVENUE**", "Amount": ""})
     for name, amt in sorted(pnl_data.get("Revenue", {}).items(), key=lambda x: x[0].lower()):
-        rows.append({"Account": f"    {name}", "Amount": format_currency(abs(amt))})
+        rows.append({"Account": f"    {name}", "Amount": format_currency(amt)})
     rows.append({"Account": "**Total Revenue**", "Amount": f"**{format_currency(totals['total_revenue'])}**"})
     rows.append({"Account": "", "Amount": ""})
     
@@ -1415,7 +1415,7 @@ def render_pnl(pnl_data: dict, title: str = "📊 Profit & Loss Statement"):
     if pnl_data.get("Cost of Goods Sold"):
         rows.append({"Account": "**COST OF GOODS SOLD**", "Amount": ""})
         for name, amt in sorted(pnl_data.get("Cost of Goods Sold", {}).items(), key=lambda x: x[0].lower()):
-            rows.append({"Account": f"    {name}", "Amount": format_currency(abs(amt))})
+            rows.append({"Account": f"    {name}", "Amount": format_currency(amt)})
         rows.append({"Account": "**Total COGS**", "Amount": f"**{format_currency(totals['total_cogs'])}**"})
         rows.append({"Account": "", "Amount": ""})
     
@@ -1426,7 +1426,7 @@ def render_pnl(pnl_data: dict, title: str = "📊 Profit & Loss Statement"):
     # Expenses
     rows.append({"Account": "**OPERATING EXPENSES**", "Amount": ""})
     for name, amt in sorted(pnl_data.get("Expenses", {}).items(), key=lambda x: x[0].lower()):
-        rows.append({"Account": f"    {name}", "Amount": format_currency(abs(amt))})
+        rows.append({"Account": f"    {name}", "Amount": format_currency(amt)})
     rows.append({"Account": "**Total Operating Expenses**", "Amount": f"**{format_currency(totals['total_expenses'])}**"})
     rows.append({"Account": "", "Amount": ""})
     
