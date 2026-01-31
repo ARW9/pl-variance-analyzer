@@ -1,7 +1,6 @@
 """
 P&L Variance Analyzer - Web App
 Upload P&L by Month export, get instant variance analysis
-GL optional (for top vendor breakdown only)
 """
 
 import streamlit as st
@@ -508,12 +507,6 @@ with st.sidebar:
             help="Export from QBO: Reports → Profit and Loss → Customize (by Month) → Export to CSV"
         )
         
-        gl_file = st.file_uploader(
-            "📋 General Ledger (.csv) — Optional",
-            type=['csv'],
-            help="Optional: Only needed for top vendor analysis. Export from QBO: Reports → General Ledger → Export to CSV"
-        )
-        
         st.divider()
         
         # Industry list (alphabetically sorted, default first)
@@ -602,11 +595,6 @@ with st.sidebar:
         2. Click **Customize** → Display → Select **Months**
         3. Set your date range (e.g., full year)
         4. Run Report → **Export to CSV**
-        
-        **General Ledger (Optional):**
-        Reports → General Ledger → Set date range → Export to CSV
-        
-        *Only needed for top vendor analysis - all P&L figures come from the P&L report*
         """)
     
     with st.expander("💰 Pricing"):
@@ -1867,7 +1855,7 @@ def render_analysis(analysis, is_demo=False, pnl_data=None, transactions=None, a
 ---
 
 **Total Expenses**  
-The sum of all operating expenses in your General Ledger for the period analyzed.  
+The sum of all operating expenses from your P&L for the period analyzed.  
 *📈 Going up?* You're spending more — could be growth (good) or cost creep (review needed).  
 *📉 Going down?* You're spending less — efficiency gains or possibly underinvesting.
 
@@ -2006,14 +1994,11 @@ if 'analysis' not in st.session_state:
             """)
         with exp_col2:
             st.markdown("""
-            **📋 Export General Ledger (Optional)**
-            1. Go to **Reports** in the left menu
-            2. Search for **"General Ledger"**
-            3. Set your **date range** (same as P&L)
-            4. Click **Run Report**
-            5. Click **Export** → **Export to CSV**
-            
-            *⏱️ Optional: Use for transaction drill-down*
+            **💡 Tips for best results**
+            • Use the same date range you want to analyze
+            • Export as CSV (not Excel)
+            • Don't modify the file before uploading
+            • Make sure you select "By Month" view
             """)
     
     # FAQ Section (collapsed by default)
@@ -2045,9 +2030,8 @@ Your files are temporarily written to the server during analysis, then deleted w
 **What file formats are supported?**
 
 • **QuickBooks Online only** (not QuickBooks Desktop)
-• CSV files exported from QBO (requires Modern View mode)
-• Profit & Loss by Month report (required)
-• General Ledger (optional, for transaction drill-down)
+• CSV files exported from QBO
+• Profit & Loss by Month report
 • Raw exports only — don't modify the files before uploading
 
 ---
@@ -2070,7 +2054,7 @@ Our industry benchmarks are compiled from multiple sources including IBISWorld i
         st.markdown("""
         <div class="cta-section">
             <h3>Ready to analyze your expenses?</h3>
-            <p>Upload your Chart of Accounts and General Ledger files using the sidebar</p>
+            <p>Upload your Profit & Loss by Month using the sidebar</p>
         </div>
         """, unsafe_allow_html=True)
     else:
@@ -2091,7 +2075,7 @@ if analyze_btn and pl_file and user:
     
     # Save uploaded files first
     pl_path = save_uploaded_file(pl_file)
-    gl_path = save_uploaded_file(gl_file) if gl_file else None
+    gl_path = None  # GL removed - P&L only
     
     with st.spinner("Analyzing P&L data..."):
         try:
