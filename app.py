@@ -2147,13 +2147,29 @@ if analyze_btn and pl_file and user:
                 recommendations=[]
             )
             
-            # Build P&L data structure for render_analysis
+            # Build P&L data structure for render_analysis (needs account-level breakdown)
             pnl_data = {
-                'totals': totals,
-                'monthly': monthly,
-                'company_name': statement.company_name,
-                'date_range': statement.date_range
+                "Revenue": {},
+                "Cost of Goods Sold": {},
+                "Expenses": {},
+                "Other Income": {},
+                "Other Expense": {}
             }
+            
+            # Populate from P&L line items
+            for item in statement.line_items:
+                if item.is_total_row:
+                    continue
+                if item.section == PLSection.INCOME:
+                    pnl_data["Revenue"][item.name] = item.total
+                elif item.section == PLSection.COGS:
+                    pnl_data["Cost of Goods Sold"][item.name] = item.total
+                elif item.section == PLSection.EXPENSES:
+                    pnl_data["Expenses"][item.name] = item.total
+                elif item.section == PLSection.OTHER_INCOME:
+                    pnl_data["Other Income"][item.name] = item.total
+                elif item.section == PLSection.OTHER_EXPENSE:
+                    pnl_data["Other Expense"][item.name] = item.total
             
             # Build simple transactions list from P&L for month filtering
             # Each expense line item becomes a "transaction" per month
