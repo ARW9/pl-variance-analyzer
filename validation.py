@@ -130,6 +130,56 @@ def validate_gl_parsing(
             summary="⚠️ Validation skipped - no 'Total for' lines found in GL"
         )
     
+    # Helper function for fuzzy account name matching
+    def names_match(name1: str, name2: str) -> bool:
+        """Check if two account names likely refer to the same account"""
+        n1 = name1.lower().strip()
+        n2 = name2.lower().strip()
+        
+        # Exact match
+        if n1 == n2:
+            return True
+        
+        # One contains the other (handles parent:child)
+        if n1 in n2 or n2 in n1:
+            return True
+        
+        # Match at end of parent:child path
+        if n1.endswith(":" + n2) or n2.endswith(":" + n1):
+            return True
+        
+        # Normalize common variations
+        def normalize(s):
+            s = s.replace(" and ", " & ").replace(" & ", " ")
+            s = s.replace("charges", "").replace("fees", "fee")
+            s = s.replace("expense", "").replace("expenses", "")
+            s = s.replace("professional", "prof").replace("legal", "legal")
+            # Remove common suffixes/prefixes
+            s = s.replace("  ", " ").strip()
+            return s
+        
+        n1_norm = normalize(n1)
+        n2_norm = normalize(n2)
+        
+        if n1_norm == n2_norm:
+            return True
+        
+        # Check if significant words overlap (for "Bank Charges and Fees" vs "Bank Fees")
+        words1 = set(n1.replace(":", " ").replace("&", " ").replace("-", " ").split())
+        words2 = set(n2.replace(":", " ").replace("&", " ").replace("-", " ").split())
+        # Remove common filler words
+        filler = {'and', 'the', 'of', 'for', 'a', 'an', ''}
+        words1 = words1 - filler
+        words2 = words2 - filler
+        
+        if words1 and words2:
+            # If one set is subset of the other, or significant overlap
+            overlap = words1 & words2
+            if overlap and (len(overlap) >= min(len(words1), len(words2)) * 0.6):
+                return True
+        
+        return False
+    
     # Compare our totals to GL totals
     for account_name, expected_total in gl_totals.items():
         # Check if this is a balance sheet account (skip if configured)
@@ -159,18 +209,9 @@ def validate_gl_parsing(
             actual_total = parsed_accounts[account_name].total
             matched_account = account_name
         else:
-            # Try case-insensitive match
+            # Try fuzzy matching
             for parsed_name, summary in parsed_accounts.items():
-                if parsed_name.lower() == account_name.lower():
-                    actual_total = summary.total
-                    matched_account = parsed_name
-                    break
-                # Try matching end of name (for parent:child format)
-                if parsed_name.lower().endswith(":" + account_name.lower()):
-                    actual_total = summary.total
-                    matched_account = parsed_name
-                    break
-                if account_name.lower().endswith(":" + parsed_name.lower()):
+                if names_match(account_name, parsed_name):
                     actual_total = summary.total
                     matched_account = parsed_name
                     break
@@ -178,22 +219,20 @@ def validate_gl_parsing(
         if actual_total is None:
             # Account exists in GL totals but not in our parsed data
             # This could be a parent account with sub-accounts (we sum children instead)
-            # Check if it's a parent by looking for children
-            has_children = any(
-                parsed_name.startswith(account_name + ":") or 
-                parsed_name.lower().startswith(account_name.lower() + ":")
-                for parsed_name in parsed_accounts.keys()
-            )
+            # Check if it's a parent by looking for children (fuzzy match)
+            children = [
+                (parsed_name, summary) for parsed_name, summary in parsed_accounts.items()
+                if (parsed_name.startswith(account_name + ":") or 
+                    parsed_name.lower().startswith(account_name.lower() + ":") or
+                    # Also check if parsed_name looks like a child via fuzzy match
+                    ((":" in parsed_name) and names_match(account_name, parsed_name.split(":")[0])))
+            ]
             
-            if has_children:
+            if children:
                 # Sum children to get parent total
-                child_total = sum(
-                    summary.total for parsed_name, summary in parsed_accounts.items()
-                    if parsed_name.startswith(account_name + ":") or 
-                       parsed_name.lower().startswith(account_name.lower() + ":")
-                )
+                child_total = sum(summary.total for _, summary in children)
                 actual_total = child_total
-                matched_account = f"{account_name} (summed from children)"
+                matched_account = f"{account_name} (summed from {len(children)} children)"
             else:
                 # Truly missing account
                 discrepancies.append({
