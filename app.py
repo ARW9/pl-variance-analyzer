@@ -579,35 +579,63 @@ with st.sidebar:
                     st.components.v1.html(f'<script>window.open("{checkout_url}", "_blank");</script>', height=0)
                 except Exception as e:
                     st.error(f"Error: {e}")
+        
+        # Quick Help for logged-in users
+        st.divider()
+        st.markdown("**📚 Quick Help**")
+        
+        with st.expander("📋 How to Export from QBO"):
+            st.markdown("""
+            **⚠️ Important:** QBO must be in **Modern View** mode for CSV export to be available.
+            
+            **Profit & Loss by Month (Required):**
+            1. Reports → Profit and Loss
+            2. Click **Customize** → Display → Select **Months**
+            3. Set your date range (e.g., full year)
+            4. Run Report → **Export to CSV**
+            """)
+        
+        with st.expander("💰 Pricing"):
+            st.markdown("""
+            **Free:** 3 uploads  
+            **Pro:** $10/month unlimited
+            """)
+        
+        st.markdown("*📖 More questions? See FAQs at the bottom of the page*")
+        
+        st.divider()
+        st.caption("🔒 Privacy Policy · 📜 Terms of Service")
+        st.caption("See full policies at bottom of main page")
+    
     else:
         st.info("👈 Sign in on the main page to start analyzing")
-    
-    # Always show help section in sidebar
-    st.divider()
-    st.markdown("**📚 Quick Help**")
-    
-    with st.expander("📋 How to Export from QBO"):
-        st.markdown("""
-        **⚠️ Important:** QBO must be in **Modern View** mode for CSV export to be available.
         
-        **Profit & Loss by Month (Required):**
-        1. Reports → Profit and Loss
-        2. Click **Customize** → Display → Select **Months**
-        3. Set your date range (e.g., full year)
-        4. Run Report → **Export to CSV**
-        """)
-    
-    with st.expander("💰 Pricing"):
-        st.markdown("""
-        **Free:** 3 uploads  
-        **Pro:** $10/month unlimited
-        """)
-    
-    st.markdown("*📖 More questions? See FAQs at the bottom of the page*")
-    
-    st.divider()
-    st.caption("🔒 Privacy Policy · 📜 Terms of Service")
-    st.caption("See full policies at bottom of main page")
+        # Quick Help for logged-out users
+        st.divider()
+        st.markdown("**📚 Quick Help**")
+        
+        with st.expander("📋 How to Export from QBO"):
+            st.markdown("""
+            **⚠️ Important:** QBO must be in **Modern View** mode for CSV export to be available.
+            
+            **Profit & Loss by Month (Required):**
+            1. Reports → Profit and Loss
+            2. Click **Customize** → Display → Select **Months**
+            3. Set your date range (e.g., full year)
+            4. Run Report → **Export to CSV**
+            """)
+        
+        with st.expander("💰 Pricing"):
+            st.markdown("""
+            **Free:** 3 uploads  
+            **Pro:** $10/month unlimited
+            """)
+        
+        st.markdown("*📖 More questions? See FAQs at the bottom of the page*")
+        
+        st.divider()
+        st.caption("🔒 Privacy Policy · 📜 Terms of Service")
+        st.caption("See full policies at bottom of main page")
 
 
 def save_uploaded_file(uploaded_file) -> str:
