@@ -1527,6 +1527,24 @@ def render_analysis(analysis, is_demo=False, pnl_data=None, transactions=None, a
             from coa_parser import AccountType as COA_AccountType
             from gl_analyzer import AccountType as GL_AccountType
             st.write(f"**Enum check:** COA==GL? {COA_AccountType.EXPENSE == GL_AccountType.EXPENSE}")
+            
+            # Show account name matching debug
+            if account_map and transactions:
+                gl_accounts = set(t.account for t in transactions)
+                coa_accounts = set(account_map.keys())
+                matched = gl_accounts & coa_accounts
+                unmatched_gl = gl_accounts - coa_accounts
+                
+                st.write(f"**Account matching:**")
+                st.write(f"  COA accounts: {len(coa_accounts)}")
+                st.write(f"  GL accounts: {len(gl_accounts)}")
+                st.write(f"  Matched: {len(matched)}")
+                st.write(f"  Unmatched GL accounts: {len(unmatched_gl)}")
+                
+                if unmatched_gl:
+                    st.write(f"**Sample unmatched GL accounts:** {list(unmatched_gl)[:10]}")
+                if coa_accounts:
+                    st.write(f"**Sample COA accounts:** {list(coa_accounts)[:10]}")
     
     col1, col2, col3, col4 = st.columns(4)
     
