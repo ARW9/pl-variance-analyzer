@@ -2228,8 +2228,8 @@ if analyze_btn and pl_file and user:
                 ga_as_pct_of_revenue=(totals['expenses'] / totals['revenue'] * 100) if totals['revenue'] else 0,
                 categories=categories,
                 top_vendors=[],  # Requires GL data
-                fixed_costs=sum(c.total for c in categories if c.consistency_expected),
-                variable_costs=sum(c.total for c in categories if not c.consistency_expected),
+                fixed_costs=sum(c.total for c in categories if c.is_consistent),
+                variable_costs=sum(c.total for c in categories if not c.is_consistent),
                 discretionary_costs=0,
                 essential_costs=totals['expenses'],
                 unknown_vendors_total=0,
