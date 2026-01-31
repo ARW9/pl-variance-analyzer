@@ -158,7 +158,7 @@ def create_checkout_session(user_email: str, user_id: str) -> str:
                     "currency": "usd",
                     "product_data": {
                         "name": "P&L Variance Analyzer Pro",
-                        "description": "Unlimited analyses per month",
+                        "description": "Unlimited uploads per month",
                     },
                     "unit_amount": PRO_PRICE,
                     "recurring": {"interval": "month"},
@@ -201,7 +201,7 @@ def render_auth_ui():
     if params.get("success") == "true" and "user" in st.session_state:
         upgrade_to_pro(st.session_state.user["id"])
         st.session_state.user["is_pro"] = True
-        st.success("🎉 Welcome to Pro! You now have unlimited analyses.")
+        st.success("🎉 Welcome to Pro! You now have unlimited uploads.")
         st.query_params.clear()
     
     # Check if we're in verification mode
@@ -278,13 +278,13 @@ def render_auth_ui():
 def render_usage_banner(user: dict):
     """Show usage status banner"""
     if user.get("is_pro"):
-        st.success("⭐ **Pro Account** — Unlimited analyses")
+        st.success("⭐ **Pro Account** — Unlimited uploads")
     else:
         remaining = remaining_free(user)
         if remaining > 0:
-            st.info(f"📊 **Free tier** — {remaining} of {FREE_ANALYSES} analyses remaining")
+            st.info(f"📊 **Free tier** — {remaining} of {FREE_ANALYSES} uploads remaining")
         else:
-            st.warning("⚠️ **Free tier exhausted** — Upgrade to Pro for unlimited analyses")
+            st.warning("⚠️ **Free tier exhausted** — Upgrade to Pro for unlimited uploads")
 
 def render_upgrade_cta(user: dict):
     """Show upgrade call-to-action"""
@@ -296,7 +296,7 @@ def render_upgrade_cta(user: dict):
     
     with col1:
         st.markdown("### 🚀 Upgrade to Pro")
-        st.markdown("**$10/month** — Unlimited analyses, priority support")
+        st.markdown("**$10/month** — Unlimited uploads, priority support")
     
     with col2:
         if st.button("Upgrade Now", type="primary", use_container_width=True):
@@ -310,9 +310,9 @@ def render_paywall():
     """Show paywall when free tier exhausted"""
     st.error("## 🔒 Free Analyses Used")
     st.markdown("""
-    You've used all **3 free analyses**. 
+    You've used all **3 free uploads**. 
     
-    Upgrade to **Pro** for unlimited analyses at just **$10/month**.
+    Upgrade to **Pro** for unlimited uploads at just **$10/month**.
     """)
     
     if st.button("🚀 Upgrade to Pro — $10/month", type="primary"):

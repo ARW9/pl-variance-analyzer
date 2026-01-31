@@ -323,7 +323,13 @@ with st.sidebar:
             st.caption("⭐ Pro — Unlimited")
         else:
             remaining = max(0, 3 - user.get("analyses_used", 0))
-            st.caption(f"📊 {remaining}/3 free analyses")
+            st.caption(f"📊 {remaining}/3 free uploads")
+            if st.button("⭐ Upgrade to Pro", use_container_width=True):
+                try:
+                    checkout_url = create_checkout_session(user["email"], user["id"])
+                    st.components.v1.html(f'<script>window.open("{checkout_url}", "_blank");</script>', height=0)
+                except Exception as e:
+                    st.error(f"Error: {e}")
         
         st.header("Upload Files")
         
@@ -352,7 +358,7 @@ with st.sidebar:
         if can_analyze(user):
             analyze_btn = st.button("🔍 Analyze", type="primary", use_container_width=True)
         else:
-            st.error("⚠️ Free analyses exhausted")
+            st.error("⚠️ Free uploads exhausted")
             analyze_btn = st.button("🔍 Analyze", type="primary", use_container_width=True, disabled=True)
             if st.button("🚀 Upgrade to Pro", type="secondary", use_container_width=True):
                 try:
@@ -378,7 +384,7 @@ with st.sidebar:
     
     with st.expander("💰 Pricing"):
         st.markdown("""
-        **Free:** 3 analyses  
+        **Free:** 3 uploads  
         **Pro:** $10/month unlimited
         """)
 
@@ -1238,14 +1244,20 @@ if 'analysis' not in st.session_state:
         st.markdown("""
 **How much does it cost?**
 
-• **Free Tier** — 3 free analyses to try the tool
-• **Pro Plan** — $10/month for unlimited analyses
+• **Free Tier** — 3 free uploads to try the tool
+• **Pro Plan** — $10/month for unlimited uploads
+
+---
+
+**Are my documents saved somewhere when I upload them for analysis?**
+
+No. Your files are processed in memory and immediately discarded after analysis. We never store, save, or retain your uploaded documents. Your financial data stays yours.
 
 ---
 
 **How safe is my data?**
 
-• Files are processed and immediately deleted
+• Files are processed in memory and immediately discarded
 • We never store your financial data
 • Read-only analysis - can't modify your QuickBooks
 • All connections encrypted via HTTPS
@@ -1277,7 +1289,7 @@ Yes! Month-to-month, no contracts. Cancel anytime via email or Stripe portal.
     else:
         st.markdown("""
         <div style="text-align: center; padding: 2rem; background: linear-gradient(135deg, #171717 0%, #262626 100%); border-radius: 12px; margin-top: 2rem;">
-            <h3 style="color: white; margin-bottom: 1rem;">Try it free — 3 analyses included</h3>
+            <h3 style="color: white; margin-bottom: 1rem;">Try it free — 3 uploads included</h3>
             <p style="color: #a3a3a3;">Sign in with your email above to get started. No credit card required.</p>
         </div>
     """, unsafe_allow_html=True)
