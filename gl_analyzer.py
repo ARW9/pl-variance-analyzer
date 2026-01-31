@@ -437,8 +437,8 @@ def format_currency(amount: float) -> str:
     return f"${amount:,.2f}"
 
 
-def generate_report(gl_file: str, mapping_file: str, api_key: str = None) -> str:
-    """Generate full analysis report"""
+def generate_report(gl_file: str, mapping_file: str, api_key: str = None, validate: bool = True) -> str:
+    """Generate full analysis report with optional validation"""
     
     # Load mapping
     account_map = load_account_mapping(mapping_file)
@@ -455,8 +455,23 @@ def generate_report(gl_file: str, mapping_file: str, api_key: str = None) -> str
     # Find unusual transactions
     unusual = find_unusual_transactions(transactions)
     
+    # Run validation to ensure parsing accuracy
+    validation_result = None
+    if validate:
+        from validation import validate_gl_parsing, generate_validation_report
+        validation_result = validate_gl_parsing(gl_file, accounts, account_map)
+    
     # Build report
     report = []
+    
+    # Show validation status first if there are issues
+    if validation_result and not validation_result.passed:
+        report.append("⚠️" + "=" * 68)
+        report.append("⚠️  VALIDATION WARNING - REVIEW BEFORE TRUSTING OUTPUT")
+        report.append("⚠️" + "=" * 68)
+        report.append(validation_result.summary)
+        report.append("=" * 70 + "\n")
+    
     report.append("=" * 70)
     report.append("📊 FINANCIAL ANALYSIS REPORT")
     report.append("=" * 70)
@@ -489,6 +504,16 @@ def generate_report(gl_file: str, mapping_file: str, api_key: str = None) -> str
     report.append("=" * 70)
     report.append(f"Total transactions analyzed: {len(transactions)}")
     report.append(f"Accounts with activity: {len([a for a in accounts.values() if a.transaction_count > 0])}")
+    
+    # Add validation summary at end
+    if validation_result:
+        report.append("\n" + "=" * 70)
+        report.append("🔍 VALIDATION STATUS")
+        report.append("=" * 70)
+        if validation_result.passed:
+            report.append("✅ All account totals match GL source file")
+        else:
+            report.append(validation_result.summary)
     
     return "\n".join(report)
 

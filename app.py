@@ -720,8 +720,9 @@ def validate_gl_file(file_path: str) -> tuple[bool, str, dict]:
 
 
 def run_analysis(coa_path: str, gl_path: str, industry: str, date_format: str = "auto"):
-    """Run the full analysis pipeline"""
+    """Run the full analysis pipeline with validation"""
     from gl_analyzer import parse_gl_with_mapping, build_financial_statements
+    from validation import validate_gl_parsing
     
     # Parse CoA to create mapping
     account_map = parse_qbo_coa(coa_path)
@@ -741,10 +742,13 @@ def run_analysis(coa_path: str, gl_path: str, industry: str, date_format: str = 
     accounts, transactions = parse_gl_with_mapping(gl_path, type_map, date_format=date_format)
     pnl_data, _ = build_financial_statements(accounts)
     
+    # Run validation to ensure parsed totals match GL source
+    validation_result = validate_gl_parsing(gl_path, accounts, account_map)
+    
     # Cleanup
     os.unlink(mapping_path)
     
-    return analysis, account_map, pnl_data, transactions, date_format
+    return analysis, account_map, pnl_data, transactions, date_format, validation_result
 
 
 # Create mock demo data
@@ -1903,13 +1907,25 @@ if analyze_btn and coa_file and gl_file and user:
     with st.spinner("Analyzing expenses..."):
         try:
             # Run analysis with date format
-            analysis, account_map, pnl_data, transactions, used_date_format = run_analysis(
+            analysis, account_map, pnl_data, transactions, used_date_format, validation_result = run_analysis(
                 coa_path, gl_path, industry, date_format
             )
             
             # Cleanup temp files
             os.unlink(coa_path)
             os.unlink(gl_path)
+            
+            # Show validation warnings if any
+            if validation_result and not validation_result.passed:
+                st.warning(f"""
+                ⚠️ **Parsing Validation Warning**
+                
+                {validation_result.summary}
+                
+                The analysis may contain inaccuracies. Please verify key totals against your QBO reports.
+                """)
+            elif validation_result and validation_result.passed:
+                st.success("✓ Parsing validated - totals match GL source file")
             
             # Increment usage (only for non-pro users)
             if not user.get("is_pro"):
@@ -1923,6 +1939,7 @@ if analyze_btn and coa_file and gl_file and user:
             st.session_state['transactions'] = transactions
             st.session_state['industry'] = industry
             st.session_state['date_format'] = used_date_format
+            st.session_state['validation_result'] = validation_result
             
             st.rerun()
             
