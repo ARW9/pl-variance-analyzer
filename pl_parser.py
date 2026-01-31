@@ -102,7 +102,7 @@ def detect_section(row_name: str, current_section: PLSection) -> PLSection:
         return PLSection.OTHER_EXPENSE
     elif name_lower in ["net other income", "total other income/expense"]:
         return PLSection.NET_OTHER_INCOME
-    elif name_lower == "net income":
+    elif name_lower in ["net income", "profit", "net profit"]:
         return PLSection.NET_INCOME
     
     return current_section
@@ -204,12 +204,13 @@ def parse_pl_csv(file_path: str) -> PLStatement:
         
         # Check for QBO total/summary rows
         is_qbo_total = name_lower in [
-            "gross profit", "net operating income", "operating income", "net other income", "net income",
+            "gross profit", "net operating income", "operating income", "net other income", 
+            "net income", "profit", "net profit",
             "total for income", "total income", "total revenue",
             "total for cost of goods sold", "total cost of goods sold", "total cogs",
             "total for expenses", "total expenses", "total operating expenses",
             "total for other income", "total other income",
-            "total for other expense", "total other expense", "total other expenses"
+            "total for other expense", "total other expense", "total other expenses", "total for other expenses"
         ]
         
         if is_qbo_total:
@@ -223,7 +224,7 @@ def parse_pl_csv(file_path: str) -> PLStatement:
                 qbo_gross_profit = monthly_values
             elif name_lower in ["net operating income", "operating income"]:
                 qbo_net_operating_income = monthly_values
-            elif name_lower == "net income":
+            elif name_lower in ["net income", "profit", "net profit"]:
                 qbo_net_income = monthly_values
             elif name_lower in ["total for income", "total income", "total revenue"]:
                 qbo_total_income = monthly_values
