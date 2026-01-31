@@ -164,6 +164,11 @@ def parse_pl_csv(file_path: str) -> PLStatement:
     current_section = PLSection.UNKNOWN
     parent_stack = []  # Track parent accounts for indentation
     
+    # Temp storage for QBO calculated values (captured during parsing, assigned after statement creation)
+    qbo_gross_profit = {}
+    qbo_net_operating_income = {}
+    qbo_net_income = {}
+    
     for i in range(header_row + 1, len(df)):
         row = df.iloc[i]
         
@@ -196,17 +201,17 @@ def parse_pl_csv(file_path: str) -> PLStatement:
                 if j + 1 < len(row):
                     monthly_values[month] = parse_currency(row.iloc[j + 1])
             
-            # Store QBO's calculated values directly in statement
+            # Store QBO's calculated values in temp variables (assigned to statement after creation)
             name_lower = account_name.lower()
             if name_lower == "gross profit":
-                statement.gross_profit = monthly_values
+                qbo_gross_profit = monthly_values
             elif name_lower == "net operating income":
-                statement.net_operating_income = monthly_values
+                qbo_net_operating_income = monthly_values
             elif name_lower == "net other income":
                 # This is already net (Other Income - Other Expense)
                 pass  # We'll derive this from other_income - other_expense
             elif name_lower == "net income":
-                statement.net_income = monthly_values
+                qbo_net_income = monthly_values
             continue
         
         # Parse monthly values
@@ -262,6 +267,14 @@ def parse_pl_csv(file_path: str) -> PLStatement:
         months=months,
         line_items=line_items
     )
+    
+    # Assign QBO's calculated values (source of truth from the P&L report)
+    if qbo_gross_profit:
+        statement.gross_profit = qbo_gross_profit
+    if qbo_net_operating_income:
+        statement.net_operating_income = qbo_net_operating_income
+    if qbo_net_income:
+        statement.net_income = qbo_net_income
     
     # Calculate section totals from line items
     calculate_section_totals(statement)
