@@ -1253,32 +1253,41 @@ def render_pnl_comparison(pnl_current: dict, pnl_prior: dict, label_current: str
     # Calculate all variances for detailed analysis
     all_variances = []
     
-    # Revenue variances
+    # Revenue variances (no abs - allow negatives for refunds)
     for acct in set(pnl_current.get("Revenue", {}).keys()) | set(pnl_prior.get("Revenue", {}).keys()):
-        curr = abs(pnl_current.get("Revenue", {}).get(acct, 0))
-        prior = abs(pnl_prior.get("Revenue", {}).get(acct, 0))
+        curr = pnl_current.get("Revenue", {}).get(acct, 0)
+        prior = pnl_prior.get("Revenue", {}).get(acct, 0)
         var_amt = curr - prior
-        var_pct = ((var_amt) / prior * 100) if prior > 0 else (100 if curr > 0 else 0)
+        var_pct = ((var_amt) / abs(prior) * 100) if prior != 0 else (100 if curr != 0 else 0)
         if abs(var_amt) > 50:
             all_variances.append(("Revenue", acct, prior, curr, var_amt, var_pct))
     
     # COGS variances
     for acct in set(pnl_current.get("Cost of Goods Sold", {}).keys()) | set(pnl_prior.get("Cost of Goods Sold", {}).keys()):
-        curr = abs(pnl_current.get("Cost of Goods Sold", {}).get(acct, 0))
-        prior = abs(pnl_prior.get("Cost of Goods Sold", {}).get(acct, 0))
+        curr = pnl_current.get("Cost of Goods Sold", {}).get(acct, 0)
+        prior = pnl_prior.get("Cost of Goods Sold", {}).get(acct, 0)
         var_amt = curr - prior
-        var_pct = ((var_amt) / prior * 100) if prior > 0 else (100 if curr > 0 else 0)
+        var_pct = ((var_amt) / abs(prior) * 100) if prior != 0 else (100 if curr != 0 else 0)
         if abs(var_amt) > 50:
             all_variances.append(("COGS", acct, prior, curr, var_amt, var_pct))
     
     # Expense variances
     for acct in set(pnl_current.get("Expenses", {}).keys()) | set(pnl_prior.get("Expenses", {}).keys()):
-        curr = abs(pnl_current.get("Expenses", {}).get(acct, 0))
-        prior = abs(pnl_prior.get("Expenses", {}).get(acct, 0))
+        curr = pnl_current.get("Expenses", {}).get(acct, 0)
+        prior = pnl_prior.get("Expenses", {}).get(acct, 0)
         var_amt = curr - prior
-        var_pct = ((var_amt) / prior * 100) if prior > 0 else (100 if curr > 0 else 0)
+        var_pct = ((var_amt) / abs(prior) * 100) if prior != 0 else (100 if curr != 0 else 0)
         if abs(var_amt) > 50:
             all_variances.append(("Expense", acct, prior, curr, var_amt, var_pct))
+    
+    # Other Income variances
+    for acct in set(pnl_current.get("Other Income", {}).keys()) | set(pnl_prior.get("Other Income", {}).keys()):
+        curr = pnl_current.get("Other Income", {}).get(acct, 0)
+        prior = pnl_prior.get("Other Income", {}).get(acct, 0)
+        var_amt = curr - prior
+        var_pct = ((var_amt) / abs(prior) * 100) if prior != 0 else (100 if curr != 0 else 0)
+        if abs(var_amt) > 50:
+            all_variances.append(("Other Income", acct, prior, curr, var_amt, var_pct))
     
     # Sort by absolute variance amount
     all_variances.sort(key=lambda x: -abs(x[4]))
