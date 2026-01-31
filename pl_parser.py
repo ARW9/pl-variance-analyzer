@@ -185,6 +185,10 @@ def parse_pl_csv(file_path: str) -> PLStatement:
             if not has_values:
                 continue
         
+        # Skip footer/metadata rows
+        if "accrual basis" in account_name.lower() or "cash basis" in account_name.lower():
+            continue
+        
         # Skip calculated rows we'll derive ourselves
         if account_name.lower() in ["gross profit", "net operating income", "net other income", "net income"]:
             # But still capture the values for validation
