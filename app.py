@@ -1646,39 +1646,6 @@ def render_analysis(analysis, is_demo=False, pnl_data=None, transactions=None, a
     if transactions and not is_demo:
         st.header("📅 Period Selection")
         
-        # Debug: Show sample transaction dates
-        with st.expander("🔧 Debug: Transaction Data", expanded=False):
-            st.write(f"**Total transactions:** {len(transactions)}")
-            if transactions:
-                dayfirst = detect_dayfirst(transactions)
-                st.write(f"**Date format detected:** {'DD/MM/YYYY (day-first)' if dayfirst else 'MM/DD/YYYY (month-first)'}")
-                
-                sample_dates = [t.date for t in transactions[:10]]
-                st.write(f"**Sample dates (first 10):** {sample_dates}")
-                
-                # Show transactions per month
-                from collections import Counter
-                month_counts = Counter()
-                unparseable = []
-                for t in transactions:
-                    try:
-                        d = str(t.date)
-                        # Handle already-normalized dates
-                        if len(d) >= 10 and d[4] == '-':
-                            month_counts[d[:7]] += 1
-                        else:
-                            parsed = pd.to_datetime(t.date, dayfirst=dayfirst)
-                            month_counts[parsed.strftime("%Y-%m")] += 1
-                    except:
-                        unparseable.append(t.date)
-                
-                st.write(f"**Transactions per month:**")
-                for month, count in sorted(month_counts.items()):
-                    st.write(f"  {month}: {count} transactions")
-                
-                if unparseable:
-                    st.warning(f"**Unparseable dates ({len(unparseable)}):** {unparseable[:10]}")
-        
         months = extract_months_from_transactions(transactions)
         
         if months:
@@ -1720,9 +1687,6 @@ def render_analysis(analysis, is_demo=False, pnl_data=None, transactions=None, a
                 txns_prior = filter_transactions_by_month(transactions, prior_month)
                 txns_current = filter_transactions_by_month(transactions, current_month)
                 
-                # Debug: show transaction counts
-                st.info(f"🔧 Debug: Prior ({prior_month}): {len(txns_prior)} txns | Current ({current_month}): {len(txns_current)} txns | Total: {len(transactions)}")
-                
                 pnl_prior = build_pnl_from_transactions(txns_prior, account_map)
                 pnl_current = build_pnl_from_transactions(txns_current, account_map)
                 
@@ -1754,57 +1718,6 @@ def render_analysis(analysis, is_demo=False, pnl_data=None, transactions=None, a
     
     # Summary metrics
     st.header("💰 Expense Analysis Summary")
-    
-    # Debug: show analysis values
-    with st.expander("🔧 Debug: Analysis Values", expanded=False):
-        st.write(f"**analysis.total_ga_expenses:** ${analysis.total_ga_expenses:,.2f}")
-        st.write(f"**analysis.ga_as_pct_of_revenue:** {analysis.ga_as_pct_of_revenue:.1f}%")
-        st.write(f"**analysis.fixed_costs:** ${analysis.fixed_costs:,.2f}")
-        st.write(f"**analysis.categories:** {len(analysis.categories)}")
-        st.write(f"**analysis.unknown_vendors_total:** ${analysis.unknown_vendors_total:,.2f}")
-        if pnl_data:
-            st.write(f"**pnl_data Revenue:** ${sum(pnl_data.get('Revenue', {}).values()):,.2f}")
-            st.write(f"**pnl_data Expenses:** ${sum(pnl_data.get('Expenses', {}).values()):,.2f}")
-        
-        # Show transaction account types distribution
-        if transactions:
-            from collections import Counter
-            type_counts = Counter(str(t.account_type) for t in transactions)
-            st.write("**Transaction account types:**")
-            for typ, count in type_counts.most_common():
-                st.write(f"  {typ}: {count}")
-            
-            # Check enum identity
-            from coa_parser import AccountType as COA_AccountType
-            from gl_analyzer import AccountType as GL_AccountType
-            st.write(f"**Enum check:** COA==GL? {COA_AccountType.EXPENSE == GL_AccountType.EXPENSE}")
-            
-            # Show account name matching debug
-            if account_map and transactions:
-                gl_accounts = set(t.account for t in transactions)
-                coa_accounts = set(account_map.keys())
-                matched = gl_accounts & coa_accounts
-                unmatched_gl = gl_accounts - coa_accounts
-                
-                st.write(f"**Account matching:**")
-                st.write(f"  COA accounts: {len(coa_accounts)}")
-                st.write(f"  GL accounts: {len(gl_accounts)}")
-                st.write(f"  Matched: {len(matched)}")
-                st.write(f"  Unmatched GL accounts: {len(unmatched_gl)}")
-                
-                if unmatched_gl:
-                    st.write(f"**Sample unmatched GL accounts:** {list(unmatched_gl)[:10]}")
-                if coa_accounts:
-                    st.write(f"**Sample COA accounts:** {list(coa_accounts)[:10]}")
-                
-                # Show what the GL names look like stripped
-                if unmatched_gl:
-                    import re
-                    stripped_samples = []
-                    for name in list(unmatched_gl)[:5]:
-                        stripped = re.sub(r'^\d+[\s\-]+', '', name).strip()
-                        stripped_samples.append(f"'{name}' -> '{stripped}'")
-                    st.write(f"**GL names stripped:** {stripped_samples}")
     
     col1, col2, col3 = st.columns(3)
     
@@ -2112,33 +2025,6 @@ if analyze_btn and pl_file and user:
             
             # Show validation info
             st.success(f"✓ P&L parsed: {statement.company_name} | {statement.date_range} | {len(statement.line_items)} accounts")
-            
-            # Debug: Show QBO totals that were parsed
-            with st.expander("🔧 Debug: Parsed QBO Totals", expanded=True):
-                st.write("**These values come directly from the P&L rows:**")
-                st.write(f"- Total Income: ${summary['totals'].get('revenue', 0):,.2f}")
-                st.write(f"- Total COGS: ${summary['totals'].get('cogs', 0):,.2f}")
-                st.write(f"- Gross Profit: ${summary['totals'].get('gross_profit', 0):,.2f}")
-                st.write(f"- Total Expenses: ${summary['totals'].get('expenses', 0):,.2f}")
-                st.write(f"- **Net Operating Income: ${summary['totals'].get('operating_income', 0):,.2f}**")
-                st.write(f"- Other Income: ${summary['totals'].get('other_income', 0):,.2f}")
-                st.write(f"- **Other Expense: ${summary['totals'].get('other_expense', 0):,.2f}**")
-                st.write(f"- **Net Income: ${summary['totals'].get('net_income', 0):,.2f}**")
-                st.write("---")
-                st.write("**Calculated check:**")
-                calc_gp = summary['totals'].get('revenue', 0) - summary['totals'].get('cogs', 0)
-                calc_noi = summary['totals'].get('gross_profit', 0) - summary['totals'].get('expenses', 0)
-                calc_ni = summary['totals'].get('operating_income', 0) + summary['totals'].get('other_income', 0) - summary['totals'].get('other_expense', 0)
-                st.write(f"- Gross Profit (Revenue - COGS): ${calc_gp:,.2f}")
-                st.write(f"- Net Operating Income (GP - Expenses): ${calc_noi:,.2f}")
-                st.write(f"- Net Income (NOI + Other Inc - Other Exp): ${calc_ni:,.2f}")
-                st.write("---")
-                st.write("**Line items by section:**")
-                from pl_parser import PLSection
-                other_income_items = [f"{item.name}: ${item.total:,.2f}" for item in statement.line_items if item.section == PLSection.OTHER_INCOME and not item.is_total_row]
-                other_expense_items = [f"{item.name}: ${item.total:,.2f}" for item in statement.line_items if item.section == PLSection.OTHER_EXPENSE and not item.is_total_row]
-                st.write(f"Other Income items: {other_income_items if other_income_items else 'None found'}")
-                st.write(f"Other Expense items: {other_expense_items if other_expense_items else 'None found'}")
             
             # Convert P&L statement to GAAnalysis format for existing render_analysis
             totals = summary['totals']
