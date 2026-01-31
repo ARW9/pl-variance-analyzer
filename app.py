@@ -767,14 +767,38 @@ def extract_months_from_transactions(transactions: list) -> list:
     for txn in transactions:
         try:
             date_str = txn.date if hasattr(txn, 'date') else txn.get('date', '')
-            if '/' in str(date_str):
-                parts = str(date_str).split('/')
-                if len(parts) >= 3:
-                    month_key = f"{parts[2]}-{parts[0].zfill(2)}"  # YYYY-MM
-                    months.add(month_key)
-            elif '-' in str(date_str):
-                month_key = str(date_str)[:7]  # YYYY-MM
+            date_str = str(date_str).strip()
+            
+            # Try pandas to parse any date format
+            try:
+                parsed = pd.to_datetime(date_str, dayfirst=False)
+                month_key = parsed.strftime("%Y-%m")
                 months.add(month_key)
+                continue
+            except:
+                pass
+            
+            # Fallback: manual parsing for common formats
+            if '/' in date_str:
+                parts = date_str.split('/')
+                if len(parts) >= 3:
+                    # Try MM/DD/YYYY
+                    if len(parts[2]) == 4:
+                        month_key = f"{parts[2]}-{parts[0].zfill(2)}"
+                    # Try DD/MM/YYYY or YYYY/MM/DD
+                    elif len(parts[0]) == 4:
+                        month_key = f"{parts[0]}-{parts[1].zfill(2)}"
+                    else:
+                        continue
+                    # Validate the month
+                    if 1 <= int(month_key.split('-')[1]) <= 12:
+                        months.add(month_key)
+            elif '-' in date_str:
+                month_key = date_str[:7]
+                # Validate
+                parts = month_key.split('-')
+                if len(parts) == 2 and len(parts[0]) == 4 and 1 <= int(parts[1]) <= 12:
+                    months.add(month_key)
         except:
             pass
     return sorted(months)
@@ -1233,8 +1257,13 @@ def render_analysis(analysis, is_demo=False, pnl_data=None, transactions=None, a
         months = extract_months_from_transactions(transactions)
         
         if months:
-            # Convert to readable format
-            month_labels = {m: pd.to_datetime(m).strftime("%B %Y") for m in months}
+            # Convert to readable format (with safe fallback)
+            month_labels = {}
+            for m in months:
+                try:
+                    month_labels[m] = pd.to_datetime(m).strftime("%B %Y")
+                except:
+                    month_labels[m] = m  # Use raw string as fallback
             
             col1, col2 = st.columns(2)
             
