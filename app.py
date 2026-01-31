@@ -594,6 +594,8 @@ with st.sidebar:
     
     with st.expander("📋 How to Export from QBO"):
         st.markdown("""
+        **⚠️ Important:** QBO must be in **Modern View** mode for CSV export to be available.
+        
         **Profit & Loss by Month (Required):**
         1. Reports → Profit and Loss
         2. Click **Customize** → Display → Select **Months**
@@ -1975,6 +1977,8 @@ if 'analysis' not in st.session_state:
     # How-To Guides Section (collapsed by default)
     with st.expander("🎬 How to Export Your Data", expanded=False):
         st.markdown("Follow these step-by-step guides to export your data from QuickBooks Online")
+        
+        st.warning("**⚠️ Important:** QBO must be in **Modern View** mode for CSV export to be available. Check Settings → QuickBooks Labs if you don't see the CSV option.")
         
         exp_col1, exp_col2 = st.columns(2)
         with exp_col1:
