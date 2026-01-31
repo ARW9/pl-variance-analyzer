@@ -4,6 +4,7 @@ Authentication and payment handling
 import streamlit as st
 from supabase import create_client
 import stripe
+import resend
 import re
 
 # Initialize clients
@@ -31,11 +32,9 @@ def generate_verification_code() -> str:
     return str(random.randint(100000, 999999))
 
 def send_verification_email(email: str, code: str) -> bool:
-    """Send verification code via email using Supabase Edge Function or similar"""
-    # For now, using Supabase's built-in email (requires edge function setup)
-    # In production, integrate with SendGrid, Resend, or similar
+    """Send verification code via email using Resend"""
     try:
-        # Try to store in database (optional - dev mode works without this)
+        # Store code in database for verification
         try:
             supabase = get_supabase()
             supabase.table("pending_verifications").upsert({
@@ -43,14 +42,27 @@ def send_verification_email(email: str, code: str) -> bool:
                 "code": code,
             }).execute()
         except Exception:
-            # Table might not exist - that's OK in dev mode
             pass
         
-        # For demo/testing - just return True and show code in UI
+        # Send email via Resend
+        resend.api_key = st.secrets["resend"]["api_key"]
+        resend.Emails.send({
+            "from": "P&L Analyzer <onboarding@resend.dev>",
+            "to": email,
+            "subject": "Your verification code",
+            "html": f"""
+                <div style="font-family: sans-serif; max-width: 400px; margin: 0 auto; padding: 20px;">
+                    <h2 style="color: #dc2626;">P&L Variance Analyzer</h2>
+                    <p>Your verification code is:</p>
+                    <p style="font-size: 32px; font-weight: bold; letter-spacing: 4px; color: #171717;">{code}</p>
+                    <p style="color: #666; font-size: 14px;">This code expires in 10 minutes.</p>
+                </div>
+            """
+        })
         return True
     except Exception as e:
-        # Don't block on email errors in dev mode
-        return True
+        st.error(f"Failed to send email: {e}")
+        return False
 
 def verify_code(email: str, code: str) -> bool:
     """Verify the code matches what was sent"""
