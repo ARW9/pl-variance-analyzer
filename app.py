@@ -502,15 +502,15 @@ with st.sidebar:
         st.header("Upload Files")
         
         coa_file = st.file_uploader(
-            "Chart of Accounts (.xlsx)",
-            type=['xlsx'],
-            help="Export from QBO: Settings → Chart of Accounts → Run Report → Export to Excel"
+            "Chart of Accounts (.csv or .xlsx)",
+            type=['csv', 'xlsx'],
+            help="Export from QBO: Settings → Chart of Accounts → Run Report → Export to Excel/CSV"
         )
         
         gl_file = st.file_uploader(
-            "General Ledger (.xlsx)",
-            type=['xlsx'],
-            help="Export from QBO: Reports → General Ledger → Export to Excel"
+            "General Ledger (.csv or .xlsx)",
+            type=['csv', 'xlsx'],
+            help="Export from QBO: Reports → General Ledger → Export to Excel/CSV"
         )
         
         st.divider()
@@ -612,23 +612,37 @@ with st.sidebar:
 
 def save_uploaded_file(uploaded_file) -> str:
     """Save uploaded file to temp location and return path"""
-    with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp:
+    # Determine suffix from filename
+    suffix = '.xlsx'
+    if uploaded_file.name.lower().endswith('.csv'):
+        suffix = '.csv'
+    
+    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
         tmp.write(uploaded_file.getvalue())
         return tmp.name
 
 
+def is_csv_file(file_path: str) -> bool:
+    """Check if file is CSV based on extension"""
+    return file_path.lower().endswith('.csv')
+
+
 def validate_coa_file(file_path: str) -> tuple[bool, str, dict]:
     """
-    Validate Chart of Accounts file structure.
+    Validate Chart of Accounts file structure (CSV or Excel).
     Returns (is_valid, message, info_dict)
     """
     try:
-        # Check for single sheet
-        xl = pd.ExcelFile(file_path)
-        if len(xl.sheet_names) > 1:
-            return False, f"File has multiple sheets ({len(xl.sheet_names)}). Please upload the raw QBO export with a single sheet.", {}
+        is_csv = is_csv_file(file_path)
         
-        df = pd.read_excel(file_path, sheet_name=0, header=None)
+        if is_csv:
+            df = pd.read_csv(file_path, header=None)
+        else:
+            # Check for single sheet
+            xl = pd.ExcelFile(file_path)
+            if len(xl.sheet_names) > 1:
+                return False, f"File has multiple sheets ({len(xl.sheet_names)}). Please upload the raw QBO export with a single sheet.", {}
+            df = pd.read_excel(file_path, sheet_name=0, header=None)
         
         if len(df) < 2:
             return False, "File appears to be empty or has too few rows", {}
@@ -638,7 +652,7 @@ def validate_coa_file(file_path: str) -> tuple[bool, str, dict]:
         header_row = 0
         for i in range(min(15, len(df))):
             row_str = ' '.join([str(v).lower() for v in df.iloc[i].values if pd.notna(v)])
-            if ('name' in row_str or 'account' in row_str) and 'type' in row_str:
+            if ('name' in row_str or 'account' in row_str or 'full name' in row_str) and 'type' in row_str:
                 header_found = True
                 header_row = i
                 break
@@ -651,7 +665,8 @@ def validate_coa_file(file_path: str) -> tuple[bool, str, dict]:
         
         return True, "File structure validated", {
             "rows": data_rows,
-            "header_row": header_row
+            "header_row": header_row,
+            "is_csv": is_csv
         }
     except Exception as e:
         return False, f"Could not read file: {str(e)}", {}
@@ -659,16 +674,20 @@ def validate_coa_file(file_path: str) -> tuple[bool, str, dict]:
 
 def validate_gl_file(file_path: str) -> tuple[bool, str, dict]:
     """
-    Validate General Ledger file structure.
+    Validate General Ledger file structure (CSV or Excel).
     Returns (is_valid, message, info_dict)
     """
     try:
-        # Check for single sheet
-        xl = pd.ExcelFile(file_path)
-        if len(xl.sheet_names) > 1:
-            return False, f"File has multiple sheets ({len(xl.sheet_names)}). Please upload the raw QBO export with a single sheet.", {}
+        is_csv = is_csv_file(file_path)
         
-        df = pd.read_excel(file_path, sheet_name=0, header=None)
+        if is_csv:
+            df = pd.read_csv(file_path, header=None)
+        else:
+            # Check for single sheet
+            xl = pd.ExcelFile(file_path)
+            if len(xl.sheet_names) > 1:
+                return False, f"File has multiple sheets ({len(xl.sheet_names)}). Please upload the raw QBO export with a single sheet.", {}
+            df = pd.read_excel(file_path, sheet_name=0, header=None)
         
         if len(df) < 5:
             return False, "File appears to be empty or has too few rows", {}
@@ -713,14 +732,54 @@ def validate_gl_file(file_path: str) -> tuple[bool, str, dict]:
         return True, "File structure validated", {
             "rows": data_rows,
             "header_row": header_row,
-            "detected_date_format": date_format
+            "detected_date_format": date_format,
+            "is_csv": is_csv
         }
     except Exception as e:
         return False, f"Could not read file: {str(e)}", {}
 
 
 def run_analysis(coa_path: str, gl_path: str, industry: str, date_format: str = "auto"):
-    """Run the full analysis pipeline"""
+    """Run the full analysis pipeline - supports both CSV and Excel"""
+    
+    # Check if we're using CSV files
+    use_csv = is_csv_file(coa_path) and is_csv_file(gl_path)
+    
+    if use_csv:
+        # Use the cleaner CSV parser
+        from csv_parser import analyze_csv_files, AccountType as CSV_AccountType
+        
+        result = analyze_csv_files(coa_path, gl_path)
+        
+        # Build compatible structures for the rest of the app
+        pnl_data = result["pnl"]
+        transactions = result["transactions"]
+        account_map = {}  # Not needed for CSV path
+        
+        # Create a minimal analysis object for compatibility
+        # The CSV parser gives us clean P&L data directly
+        from expense_analyzer import GAAnalysis, ExpenseCategory, VendorInfo
+        
+        total_revenue = result["totals"]["revenue"]
+        total_expenses = result["totals"]["expenses"]
+        
+        analysis = GAAnalysis(
+            total_ga_expenses=total_expenses,
+            ga_as_pct_of_revenue=(total_expenses / total_revenue * 100) if total_revenue else 0,
+            categories=[],
+            top_vendors=[],
+            monthly_totals={},
+            fixed_costs=0,
+            variable_costs=total_expenses,
+            discretionary=0,
+            essential=total_expenses,
+            unknown_vendors_total=0,
+            unknown_vendors_count=0
+        )
+        
+        return analysis, account_map, pnl_data, transactions, date_format
+    
+    # Fall back to Excel parsing
     from gl_analyzer import parse_gl_with_mapping, build_financial_statements
     
     # Parse CoA to create mapping
