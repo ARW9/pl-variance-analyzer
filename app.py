@@ -2546,3 +2546,8 @@ if user:
                 if st.button("Cancel", use_container_width=True):
                     st.session_state['confirm_delete'] = False
                     st.rerun()
+    
+    # Privacy/TOS links in sidebar
+    st.sidebar.divider()
+    st.sidebar.caption("🔒 Privacy Policy · 📜 Terms of Service")
+    st.sidebar.caption("See full policies at bottom of main page")
