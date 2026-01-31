@@ -468,7 +468,7 @@ else:
     user = render_auth_ui()
 
 # Initialize variables
-coa_file = None
+pl_file = None
 gl_file = None
 industry = "default"
 analyze_btn = False
@@ -501,16 +501,16 @@ with st.sidebar:
         
         st.header("Upload Files")
         
-        coa_file = st.file_uploader(
-            "Chart of Accounts (.csv or .xlsx)",
-            type=['csv', 'xlsx'],
-            help="Export from QBO: Settings → Chart of Accounts → Run Report → Export to Excel/CSV"
+        pl_file = st.file_uploader(
+            "📊 Profit & Loss by Month (.csv)",
+            type=['csv'],
+            help="Export from QBO: Reports → Profit and Loss → Customize (by Month) → Export to CSV"
         )
         
         gl_file = st.file_uploader(
-            "General Ledger (.csv or .xlsx)",
-            type=['csv', 'xlsx'],
-            help="Export from QBO: Reports → General Ledger → Export to Excel/CSV"
+            "📋 General Ledger (.csv) — Optional",
+            type=['csv'],
+            help="Optional: For drilling into transactions. Export from QBO: Reports → General Ledger → Export to CSV"
         )
         
         st.divider()
@@ -592,13 +592,18 @@ with st.sidebar:
     st.divider()
     st.markdown("**📚 Quick Help**")
     
-    with st.expander("📋 How to Export Data"):
+    with st.expander("📋 How to Export from QBO"):
         st.markdown("""
-        **Chart of Accounts:**
-        Settings → Chart of Accounts → Run Report → Export to Excel
+        **Profit & Loss by Month (Required):**
+        1. Reports → Profit and Loss
+        2. Click **Customize** → Display → Select **Months**
+        3. Set your date range (e.g., full year)
+        4. Run Report → **Export to CSV**
         
-        **General Ledger:**
-        Reports → General Ledger → Set date range → Run Report → Export to Excel
+        **General Ledger (Optional):**
+        Reports → General Ledger → Set date range → Export to CSV
+        
+        *Use the GL for drilling into specific transactions*
         """)
     
     with st.expander("💰 Pricing"):
@@ -1432,6 +1437,188 @@ def render_pnl(pnl_data: dict, title: str = "📊 Profit & Loss Statement"):
     return totals
 
 
+def render_pl_analysis(statement, summary, variances, industry="default"):
+    """Render P&L analysis from the new pl_parser format"""
+    from pl_parser import PLSection
+    
+    # Company header
+    st.markdown(f"""
+    <div class="glass-card" style="margin-bottom: 2rem;">
+        <h2 style="margin: 0; color: var(--primary);">{statement.company_name}</h2>
+        <p style="margin: 0.5rem 0 0 0; color: var(--text-muted);">{statement.date_range}</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # KPI Cards
+    totals = summary['totals']
+    
+    # Calculate margins
+    gross_margin = (totals['gross_profit'] / totals['revenue'] * 100) if totals['revenue'] else 0
+    net_margin = (totals['net_income'] / totals['revenue'] * 100) if totals['revenue'] else 0
+    opex_ratio = (totals['expenses'] / totals['revenue'] * 100) if totals['revenue'] else 0
+    
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.markdown(f"""
+        <div class="demo-metric">
+            <div class="demo-metric-value">${totals['revenue']:,.0f}</div>
+            <div class="demo-metric-label">Revenue</div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with col2:
+        st.markdown(f"""
+        <div class="demo-metric">
+            <div class="demo-metric-value">{gross_margin:.1f}%</div>
+            <div class="demo-metric-label">Gross Margin</div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with col3:
+        st.markdown(f"""
+        <div class="demo-metric">
+            <div class="demo-metric-value">{opex_ratio:.1f}%</div>
+            <div class="demo-metric-label">OpEx Ratio</div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with col4:
+        st.markdown(f"""
+        <div class="demo-metric">
+            <div class="demo-metric-value">${totals['net_income']:,.0f}</div>
+            <div class="demo-metric-label">Net Income ({net_margin:.1f}%)</div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    st.divider()
+    
+    # Monthly Trends
+    st.header("📈 Monthly Trends")
+    
+    monthly = summary.get('monthly', {})
+    months = [m for m in statement.months if m.lower() != 'total']
+    
+    if months and monthly.get('income'):
+        import plotly.graph_objects as go
+        
+        # Revenue & Net Income trend
+        fig = go.Figure()
+        
+        revenue_values = [monthly['income'].get(m, 0) for m in months]
+        net_income_values = [monthly['net_income'].get(m, 0) for m in months]
+        
+        fig.add_trace(go.Scatter(
+            x=months, y=revenue_values,
+            mode='lines+markers',
+            name='Revenue',
+            line=dict(color='#22c55e', width=3),
+            marker=dict(size=8)
+        ))
+        
+        fig.add_trace(go.Scatter(
+            x=months, y=net_income_values,
+            mode='lines+markers',
+            name='Net Income',
+            line=dict(color='#dc2626', width=3),
+            marker=dict(size=8)
+        ))
+        
+        fig.update_layout(
+            title="Revenue vs Net Income",
+            xaxis_title="Month",
+            yaxis_title="Amount ($)",
+            template="plotly_dark",
+            height=400,
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+        )
+        
+        st.plotly_chart(fig, use_container_width=True)
+    
+    st.divider()
+    
+    # Expense Breakdown
+    st.header("💰 Expense Breakdown")
+    
+    expense_items = [item for item in statement.line_items 
+                     if item.section == PLSection.EXPENSES and not item.is_total_row]
+    
+    if expense_items:
+        # Sort by total value
+        expense_items_sorted = sorted(expense_items, key=lambda x: abs(x.total), reverse=True)
+        
+        # Show top expenses
+        expense_data = []
+        for item in expense_items_sorted[:15]:
+            pct = (item.total / totals['expenses'] * 100) if totals['expenses'] else 0
+            expense_data.append({
+                "Account": item.name,
+                "Amount": f"${item.total:,.2f}",
+                "% of Expenses": f"{pct:.1f}%"
+            })
+        
+        st.dataframe(pd.DataFrame(expense_data), hide_index=True, use_container_width=True)
+    
+    st.divider()
+    
+    # Variance Analysis
+    st.header("🔍 Significant Variances")
+    
+    # Find items with significant MoM changes
+    significant_variances = []
+    for v in variances:
+        if v['flags']:
+            for flag in v['flags']:
+                significant_variances.append({
+                    'account': v['account'],
+                    'section': v['section'],
+                    'month': flag['month'],
+                    'change': flag['change'],
+                    'pct_change': flag['pct_change'],
+                    'severity': flag['severity']
+                })
+    
+    if significant_variances:
+        # Sort by absolute change
+        significant_variances.sort(key=lambda x: abs(x['change']), reverse=True)
+        
+        for v in significant_variances[:10]:
+            direction = "📈" if v['change'] > 0 else "📉"
+            color = "#dc2626" if (v['section'] == 'Expenses' and v['change'] > 0) or (v['section'] == 'Income' and v['change'] < 0) else "#22c55e"
+            
+            st.markdown(f"""
+            <div class="anomaly-card">
+                <h4>{direction} {v['account']}</h4>
+                <p><strong style="color: {color};">${abs(v['change']):,.0f}</strong> change ({v['pct_change']:+.0f}%) in {v['month']}</p>
+            </div>
+            """, unsafe_allow_html=True)
+    else:
+        st.info("No significant month-over-month variances detected (>50% and >$500)")
+    
+    st.divider()
+    
+    # Full P&L Table
+    st.header("📊 Full P&L Statement")
+    
+    # Build full P&L table
+    pnl_data = []
+    for item in statement.line_items:
+        row = {"Account": item.name}
+        for month in statement.months:
+            row[month] = item.monthly_values.get(month, 0)
+        pnl_data.append(row)
+    
+    if pnl_data:
+        df = pd.DataFrame(pnl_data)
+        
+        # Format currency columns
+        for col in df.columns:
+            if col != "Account":
+                df[col] = df[col].apply(lambda x: f"${x:,.2f}" if x != 0 else "-")
+        
+        st.dataframe(df, hide_index=True, use_container_width=True, height=600)
+
+
 def render_analysis(analysis, is_demo=False, pnl_data=None, transactions=None, account_map=None, industry="default"):
     """Render analysis results - used for both real and demo data"""
     
@@ -1879,62 +2066,47 @@ Our industry benchmarks are compiled from multiple sources including IBISWorld i
 
 
 # Handle analysis
-if analyze_btn and coa_file and gl_file and user:
+if analyze_btn and pl_file and user:
     # Check if user can analyze (paywall)
     if not can_analyze(user):
         render_paywall()
         st.stop()
     
     # Save uploaded files first
-    coa_path = save_uploaded_file(coa_file)
-    gl_path = save_uploaded_file(gl_file)
+    pl_path = save_uploaded_file(pl_file)
+    gl_path = save_uploaded_file(gl_file) if gl_file else None
     
-    # Validate files before processing
-    coa_valid, coa_msg, coa_info = validate_coa_file(coa_path)
-    gl_valid, gl_msg, gl_info = validate_gl_file(gl_path)
-    
-    if not coa_valid:
-        st.error(f"❌ **Chart of Accounts Error:** {coa_msg}")
-        st.info("""
-        **How to fix:**
-        1. Make sure you're uploading a Chart of Accounts export (not a different report)
-        2. Export from QBO: Settings → Chart of Accounts → Run Report → Export to Excel
-        3. Don't modify the Excel file before uploading
-        """)
-        os.unlink(coa_path)
-        os.unlink(gl_path)
-        st.stop()
-    
-    if not gl_valid:
-        st.error(f"❌ **General Ledger Error:** {gl_msg}")
-        st.info("""
-        **How to fix:**
-        1. Make sure you're uploading a General Ledger export (not a different report)
-        2. Export from QBO: Reports → General Ledger → Run Report → Export to Excel
-        3. Don't modify the Excel file before uploading
-        """)
-        os.unlink(coa_path)
-        os.unlink(gl_path)
-        st.stop()
-    
-    # Show validation info
-    st.success(f"✓ Files validated: COA ({coa_info.get('rows', 0)} accounts) | GL ({gl_info.get('rows', 0)} rows)")
-    
-    # Detect date format if auto
-    detected_format = gl_info.get('detected_date_format', 'unknown')
-    if date_format == "auto" and detected_format == "dmy":
-        st.info("📅 Detected DD/MM/YYYY date format (UK/EU/AU/CA style)")
-    
-    with st.spinner("Analyzing expenses..."):
+    with st.spinner("Analyzing P&L data..."):
         try:
-            # Run analysis with date format
-            analysis, account_map, pnl_data, transactions, used_date_format = run_analysis(
-                coa_path, gl_path, industry, date_format
-            )
+            # Import and use the P&L parser
+            from pl_parser import parse_pl_csv, get_summary_dict, get_variance_analysis
+            
+            # Parse the P&L CSV
+            statement = parse_pl_csv(pl_path)
+            summary = get_summary_dict(statement)
+            variances = get_variance_analysis(statement)
+            
+            # Validate we got data
+            if not statement.line_items:
+                st.error("❌ **P&L Parse Error:** No data found in the P&L file")
+                st.info("""
+                **How to fix:**
+                1. Make sure you're uploading a Profit & Loss by Month export
+                2. Export from QBO: Reports → Profit and Loss → Customize (by Month) → Export to CSV
+                3. Don't modify the CSV file before uploading
+                """)
+                os.unlink(pl_path)
+                if gl_path:
+                    os.unlink(gl_path)
+                st.stop()
+            
+            # Show validation info
+            st.success(f"✓ P&L parsed: {statement.company_name} | {statement.date_range} | {len(statement.line_items)} accounts")
             
             # Cleanup temp files
-            os.unlink(coa_path)
-            os.unlink(gl_path)
+            os.unlink(pl_path)
+            if gl_path:
+                os.unlink(gl_path)
             
             # Increment usage (only for non-pro users)
             if not user.get("is_pro"):
@@ -1942,58 +2114,51 @@ if analyze_btn and coa_file and gl_file and user:
                 st.session_state.user["analyses_used"] = user.get("analyses_used", 0) + 1
             
             # Store in session state
-            st.session_state['analysis'] = analysis
-            st.session_state['account_map'] = account_map
-            st.session_state['pnl_data'] = pnl_data
-            st.session_state['transactions'] = transactions
+            st.session_state['pl_statement'] = statement
+            st.session_state['pl_summary'] = summary
+            st.session_state['pl_variances'] = variances
             st.session_state['industry'] = industry
-            st.session_state['date_format'] = used_date_format
             
             st.rerun()
             
         except Exception as e:
             # Cleanup on error
             try:
-                os.unlink(coa_path)
-                os.unlink(gl_path)
+                os.unlink(pl_path)
+                if gl_path:
+                    os.unlink(gl_path)
             except:
                 pass
             
             st.error(f"❌ **Analysis Error:** {str(e)}")
             st.warning("""
             **Troubleshooting tips:**
-            1. Try changing the **Date Format** in the sidebar settings
-            2. Make sure both files are direct QBO exports (not modified)
-            3. Check that the date range in your GL includes transaction data
+            1. Make sure you exported "Profit and Loss by Month" (not just Profit and Loss)
+            2. Use CSV format (not Excel) for the P&L export
+            3. Don't modify the file before uploading
             
-            If the problem persists, please contact support with your file types and QBO region.
+            If the problem persists, please contact support.
             """)
             st.stop()
 
 # Display results if we have them
-if 'analysis' in st.session_state:
-    analysis = st.session_state['analysis']
-    pnl_data = st.session_state.get('pnl_data')
-    transactions = st.session_state.get('transactions', [])
-    account_map = st.session_state.get('account_map', {})
+if 'pl_statement' in st.session_state:
+    statement = st.session_state['pl_statement']
+    summary = st.session_state['pl_summary']
+    variances = st.session_state['pl_variances']
     selected_industry = st.session_state.get('industry', 'default')
-    selected_date_format = st.session_state.get('date_format', 'auto')
     
     # Clear analysis button
     if st.sidebar.button("🔄 New Analysis", use_container_width=True):
-        del st.session_state['analysis']
-        del st.session_state['account_map']
-        if 'pnl_data' in st.session_state:
-            del st.session_state['pnl_data']
-        if 'transactions' in st.session_state:
-            del st.session_state['transactions']
+        del st.session_state['pl_statement']
+        del st.session_state['pl_summary']
+        del st.session_state['pl_variances']
         if 'industry' in st.session_state:
             del st.session_state['industry']
-        if 'date_format' in st.session_state:
-            del st.session_state['date_format']
         st.rerun()
     
-    render_analysis(analysis, is_demo=False, pnl_data=pnl_data, transactions=transactions, account_map=account_map, industry=selected_industry)
+    # Render the P&L analysis
+    render_pl_analysis(statement, summary, variances, selected_industry)
     
     # Show upgrade CTA for free users
     if user and not user.get("is_pro"):
