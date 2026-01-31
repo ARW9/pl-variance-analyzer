@@ -1115,7 +1115,7 @@ def render_analysis(analysis, is_demo=False, pnl_data=None, transactions=None, a
     st.divider()
     
     # Tabs
-    tab1, tab2, tab3, tab4, tab5 = st.tabs(["🚨 Anomalies", "📊 Volatile", "✓ Consistent", "🏢 Vendors", "✅ Recommendations"])
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(["🚨 Anomalies", "📊 Volatile", "✓ Consistent", "🏢 Vendors", "📖 How to Use This Data"])
     
     with tab1:
         anomalies = [c for c in analysis.categories if c.has_anomaly]
@@ -1182,14 +1182,54 @@ def render_analysis(analysis, is_demo=False, pnl_data=None, transactions=None, a
             st.error(f"⚠️ {format_currency(analysis.unknown_vendors_total)} in expenses have no vendor identified ({analysis.unknown_vendors_count} transactions)")
     
     with tab5:
-        st.subheader("Actionable Recommendations")
-        for rec in analysis.recommendations:
-            if rec.startswith("💰"):
-                st.success(rec)
-            elif "🚨" in rec:
-                st.error(rec)
-            else:
-                st.warning(rec)
+        st.subheader("Understanding Your Numbers")
+        st.markdown("""
+**What Each Metric Means:**
+
+---
+
+**Total Expenses**  
+The sum of all operating expenses in your General Ledger for the period analyzed.  
+*📈 Going up?* You're spending more — could be growth (good) or cost creep (review needed).  
+*📉 Going down?* You're spending less — efficiency gains or possibly underinvesting.
+
+---
+
+**% of Revenue**  
+How much of every dollar earned goes to operating expenses.  
+*📈 Going up?* Expenses growing faster than revenue — margins shrinking. Time to review costs.  
+*📉 Going down?* You're getting more efficient — each dollar of revenue costs less to earn.
+
+---
+
+**Fixed Costs**  
+Expenses that stay roughly the same each month (rent, insurance, salaries).  
+*Why it matters:* High fixed costs = less flexibility. If revenue drops, these costs don't.
+
+---
+
+**Unidentified Vendors**  
+Transactions where we couldn't identify who was paid.  
+*Why it matters:* Makes it harder to spot patterns or negotiate better rates. Consider cleaning up vendor names in QuickBooks.
+
+---
+
+**🚨 Anomalies Tab**  
+Expenses that *should* be consistent (like rent or insurance) but aren't.  
+*What to look for:* Unexpected spikes might be billing errors, rate increases, or one-time charges that got coded wrong.
+
+---
+
+**📊 Volatile Tab**  
+Expenses that naturally vary month-to-month.  
+*What to look for:* Big swings might reveal seasonal patterns or areas where spending isn't controlled.
+
+---
+
+**✓ Consistent Tab**  
+Expenses that are predictable and stable.  
+*What it means:* These are your "set and forget" costs — good for budgeting.
+        """)
     
     # Monthly trend
     st.divider()
@@ -1253,15 +1293,16 @@ if 'analysis' not in st.session_state:
 
 **Are my documents saved somewhere when I upload them for analysis?**
 
-No. Your files are processed in memory and immediately discarded after analysis. We never store, save, or retain your uploaded documents. Your financial data stays yours.
+Your files are temporarily written to the server during analysis, then deleted when your session ends or the server restarts. We don't store your documents in any database or permanent storage. The servers are ephemeral (wiped regularly), and your data isn't retained after analysis.
 
 ---
 
 **How safe is my data?**
 
-• Files are processed in memory and immediately discarded
-• We never store your financial data
-• Read-only analysis - can't modify your QuickBooks
+• Files exist only temporarily during your session
+• No permanent storage or database retention
+• Servers are ephemeral and wiped regularly
+• Read-only analysis — can't modify your QuickBooks
 • All connections encrypted via HTTPS
 
 ---
