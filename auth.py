@@ -25,8 +25,49 @@ def is_valid_email(email: str) -> bool:
     pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
     return re.match(pattern, email) is not None
 
+def generate_verification_code() -> str:
+    """Generate a 6-digit verification code"""
+    import random
+    return str(random.randint(100000, 999999))
+
+def send_verification_email(email: str, code: str) -> bool:
+    """Send verification code via email using Supabase Edge Function or similar"""
+    # For now, using Supabase's built-in email (requires edge function setup)
+    # In production, integrate with SendGrid, Resend, or similar
+    try:
+        # Try to store in database (optional - dev mode works without this)
+        try:
+            supabase = get_supabase()
+            supabase.table("pending_verifications").upsert({
+                "email": email,
+                "code": code,
+            }).execute()
+        except Exception:
+            # Table might not exist - that's OK in dev mode
+            pass
+        
+        # For demo/testing - just return True and show code in UI
+        return True
+    except Exception as e:
+        # Don't block on email errors in dev mode
+        return True
+
+def verify_code(email: str, code: str) -> bool:
+    """Verify the code matches what was sent"""
+    try:
+        supabase = get_supabase()
+        result = supabase.table("pending_verifications").select("code").eq("email", email).execute()
+        
+        if result.data and result.data[0]["code"] == code:
+            # Delete the used code
+            supabase.table("pending_verifications").delete().eq("email", email).execute()
+            return True
+        return False
+    except:
+        return False
+
 def get_or_create_user(email: str) -> dict:
-    """Get existing user or create new one"""
+    """Get existing user or create new one (only called after verification)"""
     supabase = get_supabase()
     
     # Try to get existing user
@@ -35,8 +76,11 @@ def get_or_create_user(email: str) -> dict:
     if result.data:
         return result.data[0]
     
-    # Create new user
-    new_user = supabase.table("users").insert({"email": email}).execute()
+    # Create new user (email already verified at this point)
+    new_user = supabase.table("users").insert({
+        "email": email,
+        "email_verified": True
+    }).execute()
     return new_user.data[0]
 
 def increment_usage(user_id: str) -> dict:
@@ -119,7 +163,16 @@ def upgrade_to_pro(user_id: str):
     supabase.table("users").update({"is_pro": True}).eq("id", user_id).execute()
 
 def render_auth_ui():
-    """Render login/signup UI, returns user dict if logged in"""
+    """Render login/signup UI with email verification, returns user dict if logged in"""
+    
+    # Check URL params for logout
+    params = st.query_params
+    if params.get("logout") == "true":
+        for key in ["user", "pending_email", "verification_code"]:
+            if key in st.session_state:
+                del st.session_state[key]
+        st.query_params.clear()
+        st.rerun()
     
     # Check if already logged in
     if "user" in st.session_state and st.session_state.user:
@@ -133,7 +186,58 @@ def render_auth_ui():
         st.success("🎉 Welcome to Pro! You now have unlimited analyses.")
         st.query_params.clear()
     
-    # Login form
+    # Check if we're in verification mode
+    if "pending_email" in st.session_state:
+        email = st.session_state.pending_email
+        st.markdown("### ✉️ Check your email")
+        st.markdown(f"We sent a verification code to **{email}**")
+        
+        # For demo/development - show the code (remove in production!)
+        if "verification_code" in st.session_state:
+            st.info(f"🔧 Dev mode - Code: **{st.session_state.verification_code}**")
+        
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            code_input = st.text_input("Enter 6-digit code", placeholder="123456", max_chars=6, label_visibility="collapsed")
+        with col2:
+            verify_btn = st.button("Verify", type="primary", use_container_width=True)
+        
+        col3, col4 = st.columns(2)
+        with col3:
+            if st.button("← Change email"):
+                del st.session_state.pending_email
+                if "verification_code" in st.session_state:
+                    del st.session_state.verification_code
+                st.rerun()
+        with col4:
+            if st.button("Resend code"):
+                code = generate_verification_code()
+                st.session_state.verification_code = code  # For dev mode
+                send_verification_email(email, code)
+                st.success("New code sent!")
+        
+        if verify_btn and code_input:
+            # Check against stored code (dev mode) or database
+            stored_code = st.session_state.get("verification_code")
+            if stored_code and code_input == stored_code:
+                # Verification successful
+                user = get_or_create_user(email)
+                st.session_state.user = user
+                del st.session_state.pending_email
+                del st.session_state.verification_code
+                st.rerun()
+            elif verify_code(email, code_input):
+                # Database verification successful
+                user = get_or_create_user(email)
+                st.session_state.user = user
+                del st.session_state.pending_email
+                st.rerun()
+            else:
+                st.error("Invalid code. Please try again.")
+        
+        return None
+    
+    # Initial email entry form
     st.markdown("### 🔐 Sign in to continue")
     st.markdown("Enter your email to start analyzing your P&L data")
     
@@ -148,8 +252,11 @@ def render_auth_ui():
             st.error("Please enter a valid email address")
             return None
         
-        user = get_or_create_user(email)
-        st.session_state.user = user
+        # Generate and send verification code
+        code = generate_verification_code()
+        st.session_state.pending_email = email
+        st.session_state.verification_code = code  # For dev mode - remove in production
+        send_verification_email(email, code)
         st.rerun()
     
     return None

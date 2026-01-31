@@ -56,6 +56,10 @@ def parse_gl_with_mapping(gl_file: str, account_map: Dict[str, AccountType]) -> 
     """
     Parse GL using CoA mapping for accurate classification
     Returns account summaries and all transactions
+    
+    Calculates account totals by summing individual transactions, not from
+    "Total for" lines. This avoids double-counting when transactions post
+    to both parent and child accounts.
     """
     df = pd.read_excel(gl_file, sheet_name=0, header=None)
     
@@ -74,22 +78,41 @@ def parse_gl_with_mapping(gl_file: str, account_map: Dict[str, AccountType]) -> 
     if header_row is None:
         header_row = 3  # Default QBO position
     
+    # Parse accounts and transactions
     for i, row in df.iterrows():
         if i <= header_row:
             continue
             
         col0 = str(row[0]).strip() if pd.notna(row[0]) else ""
+        col1 = str(row[1]).strip() if pd.notna(row[1]) else ""
         
-        # Skip empty rows and totals
-        if not col0 or col0 == "nan":
+        if col0 == "nan":
+            col0 = ""
+        if col1 == "nan":
+            col1 = ""
+        
+        # Skip completely empty rows
+        if not col0 and not col1:
             continue
         
-        # Check if this is an account header (has value in col0, nothing in col1)
-        if col0 and pd.isna(row[1]) and not col0.startswith("Total"):
+        # Check if this is an account header (has value in col0, nothing meaningful in col1)
+        if col0 and (pd.isna(row[1]) or col1 == "" or col1 == "Beginning Balance") and not col0.startswith("Total"):
             # This is an account name
             current_account = col0.strip()
             # Look up type in mapping
             current_account_type = account_map.get(current_account, AccountType.UNKNOWN)
+            
+            # Try smarter matching if exact match fails
+            if current_account_type == AccountType.UNKNOWN:
+                for mapped_name, mapped_type in account_map.items():
+                    if mapped_name.endswith(":" + current_account) or mapped_name == current_account:
+                        current_account_type = mapped_type
+                        break
+                if current_account_type == AccountType.UNKNOWN:
+                    for mapped_name, mapped_type in account_map.items():
+                        if mapped_name.lower().endswith(":" + current_account.lower()):
+                            current_account_type = mapped_type
+                            break
             
             if current_account not in accounts:
                 accounts[current_account] = AccountSummary(
@@ -100,21 +123,32 @@ def parse_gl_with_mapping(gl_file: str, account_map: Dict[str, AccountType]) -> 
                     transactions=[]
                 )
         
-        # Check for "Total for X" - get the final balance
+        # Skip all "Total for" lines - we'll calculate totals from transactions
         elif col0.startswith("Total for "):
-            account_name = col0.replace("Total for ", "")
-            if "with sub-accounts" not in account_name and account_name in accounts:
-                balance = row[8] if pd.notna(row[8]) else 0
-                accounts[account_name].total = float(balance)
+            continue
         
         # Otherwise it might be a transaction row
-        elif current_account and pd.notna(row[1]):
+        elif current_account and col1 and col1 != "nan" and col1 != "Beginning Balance":
             # Transaction row: Date in col1, Type in col2, etc.
-            date = str(row[1]) if pd.notna(row[1]) else ""
-            trans_type = str(row[2]) if pd.notna(row[2]) else ""
-            vendor = str(row[5]) if pd.notna(row[5]) else ""
-            description = str(row[6]) if pd.notna(row[6]) else ""
-            amount = float(row[8]) if pd.notna(row[8]) else 0
+            date = col1
+            # Handle datetime objects
+            if hasattr(row[1], 'strftime'):
+                date = row[1].strftime('%m/%d/%Y')
+            
+            vendor = str(row[5]).strip() if len(row) > 5 and pd.notna(row[5]) else ""
+            if vendor == "nan":
+                vendor = ""
+            description = str(row[6]).strip() if len(row) > 6 and pd.notna(row[6]) else ""
+            if description == "nan":
+                description = ""
+            
+            # Amount is typically in column 8
+            amount = 0
+            try:
+                if len(row) > 8 and pd.notna(row[8]):
+                    amount = float(row[8])
+            except:
+                pass
             
             if date and date != "nan":
                 txn = Transaction(
@@ -130,6 +164,10 @@ def parse_gl_with_mapping(gl_file: str, account_map: Dict[str, AccountType]) -> 
                 if current_account in accounts:
                     accounts[current_account].transactions.append(txn)
                     accounts[current_account].transaction_count += 1
+    
+    # Calculate totals from transactions (not from "Total for" lines)
+    for account_name, account in accounts.items():
+        account.total = sum(txn.amount for txn in account.transactions)
     
     return accounts, all_transactions
 

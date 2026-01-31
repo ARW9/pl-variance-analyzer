@@ -595,7 +595,10 @@ def parse_qbo_gl(gl_file: str, account_map: Dict[str, AccountType]) -> Tuple[Dic
     - Row 0-3: Header info (Company name, Report name, Date range)
     - Row 4: Column headers (Date, Transaction Type, #, Adj, Name, Memo, Split, Amount, Balance)
     - Data rows: Account headers in col0, transactions have Date in col1
-    - "Total for X" rows contain account totals
+    
+    Calculates account totals by summing individual transactions, not from
+    "Total for" lines. This avoids double-counting when transactions post
+    to both parent and child accounts.
     """
     df = pd.read_excel(gl_file, sheet_name=0, header=None)
     
@@ -613,6 +616,7 @@ def parse_qbo_gl(gl_file: str, account_map: Dict[str, AccountType]) -> Tuple[Dic
             header_row = i
             break
     
+    # Parse accounts and transactions
     for i, row in df.iterrows():
         if i <= header_row:
             continue
@@ -621,35 +625,18 @@ def parse_qbo_gl(gl_file: str, account_map: Dict[str, AccountType]) -> Tuple[Dic
         col1_raw = row[1]
         col1 = str(row[1]).strip() if pd.notna(row[1]) else ""
         
-        # Skip empty rows
-        if not col0 and not col1:
-            continue
-        
         # Skip "nan" strings
         if col0 == "nan":
             col0 = ""
         if col1 == "nan":
             col1 = ""
         
-        # Check for "Total for X" - get the final balance
+        # Skip completely empty rows
+        if not col0 and not col1:
+            continue
+        
+        # Skip all "Total for" lines - we'll calculate totals from transactions
         if col0.startswith("Total for "):
-            account_name = col0.replace("Total for ", "").strip()
-            # Skip sub-account totals
-            if "with sub-accounts" in account_name:
-                continue
-            if account_name in accounts:
-                # Balance is in the last column (typically col 9)
-                balance = None
-                for c in [9, 8, -1]:
-                    try:
-                        idx = c if c >= 0 else len(row) + c
-                        if idx < len(row) and pd.notna(row[idx]):
-                            balance = float(row[idx])
-                            break
-                    except:
-                        continue
-                if balance is not None:
-                    accounts[account_name].total = balance
             continue
         
         # Check if this is an account header
@@ -734,6 +721,10 @@ def parse_qbo_gl(gl_file: str, account_map: Dict[str, AccountType]) -> Tuple[Dic
             if current_account in accounts:
                 accounts[current_account].transactions.append(txn)
                 accounts[current_account].transaction_count += 1
+    
+    # Calculate totals from transactions (not from "Total for" lines)
+    for account_name, account in accounts.items():
+        account.total = sum(txn.amount for txn in account.transactions)
     
     return accounts, all_transactions
 

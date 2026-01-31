@@ -20,7 +20,8 @@ from expense_analyzer import (
 # Import auth
 from auth import (
     render_auth_ui, render_usage_banner, render_upgrade_cta,
-    render_paywall, can_analyze, increment_usage, get_or_create_user
+    render_paywall, can_analyze, increment_usage, get_or_create_user,
+    create_checkout_session
 )
 
 # Page config
@@ -301,6 +302,12 @@ with st.sidebar:
     
     if user:
         st.success(f"✓ {user['email']}")
+        if st.button("🗑️ Clear Cache", help="Clear all cached data and re-analyze"):
+            for key in list(st.session_state.keys()):
+                del st.session_state[key]
+            st.cache_data.clear()
+            st.cache_resource.clear()
+            st.rerun()
         
         # Show usage banner in sidebar
         if user.get("is_pro"):
@@ -332,7 +339,18 @@ with st.sidebar:
             format_func=lambda x: x.replace("_", " ").title()
         )
         
-        analyze_btn = st.button("🔍 Analyze", type="primary", use_container_width=True)
+        # Check if user can still analyze
+        if can_analyze(user):
+            analyze_btn = st.button("🔍 Analyze", type="primary", use_container_width=True)
+        else:
+            st.error("⚠️ Free analyses exhausted")
+            analyze_btn = st.button("🔍 Analyze", type="primary", use_container_width=True, disabled=True)
+            if st.button("🚀 Upgrade to Pro", type="secondary", use_container_width=True):
+                try:
+                    checkout_url = create_checkout_session(user["email"], user["id"])
+                    st.markdown(f'<meta http-equiv="refresh" content="0;url={checkout_url}">', unsafe_allow_html=True)
+                except Exception as e:
+                    st.error(f"Error: {e}")
     else:
         st.info("👆 Sign in above to start analyzing")
 
@@ -346,6 +364,8 @@ def save_uploaded_file(uploaded_file) -> str:
 
 def run_analysis(coa_path: str, gl_path: str, industry: str):
     """Run the full analysis pipeline"""
+    from gl_analyzer import parse_gl_with_mapping, build_financial_statements
+    
     # Parse CoA to create mapping
     account_map = parse_qbo_coa(coa_path)
     
@@ -358,10 +378,16 @@ def run_analysis(coa_path: str, gl_path: str, industry: str):
     # Run analysis
     analysis = run_ga_analysis(gl_path, mapping_path, industry=industry)
     
+    # Also build P&L for display
+    from gl_analyzer import load_account_mapping
+    type_map = load_account_mapping(mapping_path)
+    accounts, _ = parse_gl_with_mapping(gl_path, type_map)
+    pnl_data, _ = build_financial_statements(accounts)
+    
     # Cleanup
     os.unlink(mapping_path)
     
-    return analysis, account_map
+    return analysis, account_map, pnl_data
 
 
 # Create mock demo data
@@ -498,12 +524,93 @@ def get_demo_analysis():
     )
 
 
-def render_analysis(analysis, is_demo=False):
+def render_pnl(pnl_data: dict, title: str = "📊 Profit & Loss Statement"):
+    """Render a proper P&L statement"""
+    st.header(title)
+    
+    # Calculate totals
+    total_revenue = sum(abs(v) for v in pnl_data.get("Revenue", {}).values())
+    total_cogs = sum(abs(v) for v in pnl_data.get("Cost of Goods Sold", {}).values())
+    gross_profit = total_revenue - total_cogs
+    total_expenses = sum(abs(v) for v in pnl_data.get("Expenses", {}).values())
+    operating_income = gross_profit - total_expenses
+    total_other_income = sum(abs(v) for v in pnl_data.get("Other Income", {}).values())
+    total_other_expense = sum(abs(v) for v in pnl_data.get("Other Expense", {}).values())
+    net_income = operating_income + total_other_income - total_other_expense
+    
+    # P&L Table
+    pnl_rows = []
+    
+    # Revenue section
+    pnl_rows.append({"Category": "**REVENUE**", "Amount": ""})
+    for name, amt in sorted(pnl_data.get("Revenue", {}).items(), key=lambda x: -abs(x[1])):
+        pnl_rows.append({"Category": f"    {name}", "Amount": format_currency(abs(amt))})
+    pnl_rows.append({"Category": "**Total Revenue**", "Amount": f"**{format_currency(total_revenue)}**"})
+    pnl_rows.append({"Category": "", "Amount": ""})
+    
+    # COGS section
+    pnl_rows.append({"Category": "**COST OF GOODS SOLD**", "Amount": ""})
+    for name, amt in sorted(pnl_data.get("Cost of Goods Sold", {}).items(), key=lambda x: -abs(x[1])):
+        pnl_rows.append({"Category": f"    {name}", "Amount": format_currency(abs(amt))})
+    pnl_rows.append({"Category": "**Total COGS**", "Amount": f"**{format_currency(total_cogs)}**"})
+    pnl_rows.append({"Category": "", "Amount": ""})
+    
+    # Gross Profit
+    gross_margin = (gross_profit / total_revenue * 100) if total_revenue else 0
+    pnl_rows.append({"Category": "**GROSS PROFIT**", "Amount": f"**{format_currency(gross_profit)}** ({gross_margin:.1f}%)"})
+    pnl_rows.append({"Category": "", "Amount": ""})
+    
+    # Expenses section
+    pnl_rows.append({"Category": "**OPERATING EXPENSES**", "Amount": ""})
+    for name, amt in sorted(pnl_data.get("Expenses", {}).items(), key=lambda x: -abs(x[1])):
+        pnl_rows.append({"Category": f"    {name}", "Amount": format_currency(abs(amt))})
+    pnl_rows.append({"Category": "**Total Operating Expenses**", "Amount": f"**{format_currency(total_expenses)}**"})
+    pnl_rows.append({"Category": "", "Amount": ""})
+    
+    # Operating Income
+    op_margin = (operating_income / total_revenue * 100) if total_revenue else 0
+    pnl_rows.append({"Category": "**OPERATING INCOME**", "Amount": f"**{format_currency(operating_income)}** ({op_margin:.1f}%)"})
+    pnl_rows.append({"Category": "", "Amount": ""})
+    
+    # Other Income/Expense
+    if pnl_data.get("Other Income") or pnl_data.get("Other Expense"):
+        pnl_rows.append({"Category": "**OTHER INCOME/EXPENSE**", "Amount": ""})
+        for name, amt in pnl_data.get("Other Income", {}).items():
+            pnl_rows.append({"Category": f"    {name}", "Amount": format_currency(abs(amt))})
+        for name, amt in pnl_data.get("Other Expense", {}).items():
+            pnl_rows.append({"Category": f"    {name}", "Amount": f"({format_currency(abs(amt))})"})
+        pnl_rows.append({"Category": "**Net Other**", "Amount": f"**{format_currency(total_other_income - total_other_expense)}**"})
+        pnl_rows.append({"Category": "", "Amount": ""})
+    
+    # Net Income
+    net_margin = (net_income / total_revenue * 100) if total_revenue else 0
+    pnl_rows.append({"Category": "**NET INCOME**", "Amount": f"**{format_currency(net_income)}** ({net_margin:.1f}%)"})
+    
+    # Display as table
+    df = pd.DataFrame(pnl_rows)
+    st.markdown(df.to_markdown(index=False), unsafe_allow_html=True)
+    
+    return {
+        "total_revenue": total_revenue,
+        "total_cogs": total_cogs,
+        "gross_profit": gross_profit,
+        "total_expenses": total_expenses,
+        "operating_income": operating_income,
+        "net_income": net_income
+    }
+
+
+def render_analysis(analysis, is_demo=False, pnl_data=None):
     """Render analysis results - used for both real and demo data"""
     
     if is_demo:
         st.markdown('<span style="background: #dc2626; color: white; padding: 4px 12px; border-radius: 20px; font-size: 0.75rem; font-weight: 700;">SAMPLE ANALYSIS</span>', unsafe_allow_html=True)
         st.caption("This is example data showing what your analysis will look like")
+    
+    # Show P&L first if we have it
+    if pnl_data:
+        render_pnl(pnl_data)
+        st.divider()
     
     # Summary metrics
     st.header("💰 Summary")
@@ -799,14 +906,25 @@ These are starting points for investigation, not guarantees. Actual savings depe
 
 # Handle analysis
 if analyze_btn and coa_file and gl_file and user:
+    # Check if user can analyze (paywall)
+    if not can_analyze(user):
+        render_paywall()
+        st.stop()
+    
     with st.spinner("Analyzing expenses..."):
         try:
             # Save uploaded files
             coa_path = save_uploaded_file(coa_file)
             gl_path = save_uploaded_file(gl_file)
             
+            # DEBUG: Show we're using fresh code
+            st.info(f"🔧 Debug: Running analysis (code version: 2026-01-31 02:01)")
+            
             # Run analysis
-            analysis, account_map = run_analysis(coa_path, gl_path, industry)
+            analysis, account_map, pnl_data = run_analysis(coa_path, gl_path, industry)
+            
+            # DEBUG: Show calculated values
+            st.success(f"🔧 Debug: Total Expenses = ${analysis.total_ga_expenses:,.2f}")
             
             # Cleanup temp files
             os.unlink(coa_path)
@@ -820,6 +938,7 @@ if analyze_btn and coa_file and gl_file and user:
             # Store in session state
             st.session_state['analysis'] = analysis
             st.session_state['account_map'] = account_map
+            st.session_state['pnl_data'] = pnl_data
             
             st.rerun()
             
@@ -830,14 +949,17 @@ if analyze_btn and coa_file and gl_file and user:
 # Display results if we have them
 if 'analysis' in st.session_state:
     analysis = st.session_state['analysis']
+    pnl_data = st.session_state.get('pnl_data')
     
     # Clear analysis button
     if st.sidebar.button("🔄 New Analysis", use_container_width=True):
         del st.session_state['analysis']
         del st.session_state['account_map']
+        if 'pnl_data' in st.session_state:
+            del st.session_state['pnl_data']
         st.rerun()
     
-    render_analysis(analysis, is_demo=False)
+    render_analysis(analysis, is_demo=False, pnl_data=pnl_data)
     
     # Show upgrade CTA for free users
     if user and not user.get("is_pro"):
