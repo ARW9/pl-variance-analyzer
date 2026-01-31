@@ -17,6 +17,12 @@ from expense_analyzer import (
     INDUSTRY_BENCHMARKS, GAAnalysis, ExpenseCategory, VendorAnalysis
 )
 
+# Import auth
+from auth import (
+    render_auth_ui, render_usage_banner, render_upgrade_cta,
+    render_paywall, can_analyze, increment_usage, get_or_create_user
+)
+
 # Page config
 st.set_page_config(
     page_title="P&L Variance Analyzer",
@@ -280,10 +286,28 @@ st.markdown("""
 st.markdown('<p class="main-header">📊 P&L Variance Analyzer</p>', unsafe_allow_html=True)
 st.markdown('<p class="sub-header">Upload your QuickBooks exports • Identify cost anomalies • Get actionable insights</p>', unsafe_allow_html=True)
 
-# Sidebar for file uploads
+# Auth check
+user = render_auth_ui()
+
+if user:
+    # Show usage banner
+    render_usage_banner(user)
+    
+    # Check if user can analyze (has free uses left or is pro)
+    if not can_analyze(user):
+        render_paywall()
+        st.stop()
+
+# Sidebar for file uploads (only show if logged in)
 with st.sidebar:
     st.image("https://img.icons8.com/fluency/96/analytics.png", width=60)
-    st.header("Upload Files")
+    
+    if user:
+        st.success(f"✓ {user['email']}")
+        st.header("Upload Files")
+    else:
+        st.info("Sign in to upload files")
+        st.stop()
     
     coa_file = st.file_uploader(
         "Chart of Accounts (.xlsx)",
@@ -738,7 +762,7 @@ These are starting points for investigation, not guarantees. Actual savings depe
 
 
 # Handle analysis
-if analyze_btn and coa_file and gl_file:
+if analyze_btn and coa_file and gl_file and user:
     with st.spinner("Analyzing expenses..."):
         try:
             # Save uploaded files
@@ -751,6 +775,11 @@ if analyze_btn and coa_file and gl_file:
             # Cleanup temp files
             os.unlink(coa_path)
             os.unlink(gl_path)
+            
+            # Increment usage (only for non-pro users)
+            if not user.get("is_pro"):
+                increment_usage(user["id"])
+                st.session_state.user["analyses_used"] = user.get("analyses_used", 0) + 1
             
             # Store in session state
             st.session_state['analysis'] = analysis
@@ -773,3 +802,18 @@ if 'analysis' in st.session_state:
         st.rerun()
     
     render_analysis(analysis, is_demo=False)
+    
+    # Show upgrade CTA for free users
+    if user and not user.get("is_pro"):
+        render_upgrade_cta(user)
+
+# Logout button in sidebar
+if user:
+    st.sidebar.divider()
+    if st.sidebar.button("Logout", use_container_width=True):
+        del st.session_state['user']
+        if 'analysis' in st.session_state:
+            del st.session_state['analysis']
+        if 'account_map' in st.session_state:
+            del st.session_state['account_map']
+        st.rerun()
