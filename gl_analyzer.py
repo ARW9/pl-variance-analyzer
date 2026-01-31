@@ -62,7 +62,7 @@ def detect_date_format(df, date_col=1) -> bool:
     return False  # Default to MM/DD/YYYY
 
 
-def parse_gl_with_mapping(gl_file: str, account_map: Dict[str, AccountType]) -> Tuple[Dict[str, AccountSummary], List[Transaction]]:
+def parse_gl_with_mapping(gl_file: str, account_map: Dict[str, AccountType], date_format: str = "auto") -> Tuple[Dict[str, AccountSummary], List[Transaction]]:
     """
     Parse GL using CoA mapping for accurate classification
     Returns account summaries and all transactions
@@ -73,8 +73,13 @@ def parse_gl_with_mapping(gl_file: str, account_map: Dict[str, AccountType]) -> 
     """
     df = pd.read_excel(gl_file, sheet_name=0, header=None)
     
-    # Detect date format
-    dayfirst = detect_date_format(df)
+    # Determine date format
+    if date_format == "dmy":
+        dayfirst = True
+    elif date_format == "mdy":
+        dayfirst = False
+    else:  # auto
+        dayfirst = detect_date_format(df)
     
     accounts = {}
     all_transactions = []

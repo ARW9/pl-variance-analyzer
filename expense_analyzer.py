@@ -781,7 +781,8 @@ def run_ga_analysis(
     gl_file: str,
     mapping_file: str,
     total_revenue: float = None,
-    industry: str = "default"
+    industry: str = "default",
+    date_format: str = "auto"
 ) -> GAAnalysis:
     """
     Run complete G&A expense analysis
@@ -791,6 +792,7 @@ def run_ga_analysis(
         mapping_file: Path to account_mapping.json
         total_revenue: Total revenue for period (for % calculations)
         industry: Industry for benchmarking
+        date_format: Date format override ("auto", "mdy", "dmy")
     
     Returns:
         GAAnalysis object with complete analysis
@@ -798,8 +800,8 @@ def run_ga_analysis(
     # Load mapping
     account_map = load_account_mapping(mapping_file)
     
-    # Parse the GL using QBO format parser
-    accounts, transactions = parse_qbo_gl(gl_file, account_map)
+    # Parse the GL using unified parser with date format support
+    accounts, transactions = parse_gl_with_mapping(gl_file, account_map, date_format=date_format)
     
     pnl, _ = build_financial_statements(accounts)
     

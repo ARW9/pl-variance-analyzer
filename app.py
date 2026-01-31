@@ -555,6 +555,38 @@ with st.sidebar:
             format_func=format_industry
         )
         
+        # Advanced Settings
+        with st.expander("⚙️ Data Compatibility Settings", expanded=False):
+            st.caption("Adjust these if your data isn't parsing correctly")
+            
+            date_format = st.selectbox(
+                "Date Format",
+                options=["auto", "mdy", "dmy"],
+                format_func=lambda x: {
+                    "auto": "Auto-detect (recommended)",
+                    "mdy": "MM/DD/YYYY (US)",
+                    "dmy": "DD/MM/YYYY (UK/EU/AU/CA)"
+                }[x],
+                help="Override automatic date format detection if months look wrong"
+            )
+            
+            st.markdown("---")
+            st.markdown("**📋 Export Requirements:**")
+            st.markdown("""
+            - **File type:** Excel (.xlsx) only
+            - **Chart of Accounts:** Must include columns for account **Name** and **Type**
+            - **General Ledger:** Must include **Date**, **Amount**, and account names
+            - **Date range:** Export the full period you want to analyze
+            """)
+            
+            st.markdown("**💡 Tips for best results:**")
+            st.markdown("""
+            - Export directly from QBO (not via third-party tools)
+            - Don't modify the Excel files before uploading
+            - Use "Run Report" then "Export to Excel" in QBO
+            - If comparison looks wrong, try changing Date Format above
+            """)
+        
         # Check if user can still analyze
         if can_analyze(user):
             analyze_btn = st.button("🔍 Analyze", type="primary", use_container_width=True)
@@ -599,7 +631,99 @@ def save_uploaded_file(uploaded_file) -> str:
         return tmp.name
 
 
-def run_analysis(coa_path: str, gl_path: str, industry: str):
+def validate_coa_file(file_path: str) -> tuple[bool, str, dict]:
+    """
+    Validate Chart of Accounts file structure.
+    Returns (is_valid, message, info_dict)
+    """
+    try:
+        df = pd.read_excel(file_path, sheet_name=0, header=None)
+        
+        if len(df) < 2:
+            return False, "File appears to be empty or has too few rows", {}
+        
+        # Look for header row with name and type columns
+        header_found = False
+        header_row = 0
+        for i in range(min(15, len(df))):
+            row_str = ' '.join([str(v).lower() for v in df.iloc[i].values if pd.notna(v)])
+            if ('name' in row_str or 'account' in row_str) and 'type' in row_str:
+                header_found = True
+                header_row = i
+                break
+        
+        if not header_found:
+            return False, "Could not find column headers (expected 'Name' and 'Type' columns). Make sure you're uploading a Chart of Accounts export.", {}
+        
+        # Count data rows
+        data_rows = len(df) - header_row - 1
+        
+        return True, "File structure validated", {
+            "rows": data_rows,
+            "header_row": header_row
+        }
+    except Exception as e:
+        return False, f"Could not read file: {str(e)}", {}
+
+
+def validate_gl_file(file_path: str) -> tuple[bool, str, dict]:
+    """
+    Validate General Ledger file structure.
+    Returns (is_valid, message, info_dict)
+    """
+    try:
+        df = pd.read_excel(file_path, sheet_name=0, header=None)
+        
+        if len(df) < 5:
+            return False, "File appears to be empty or has too few rows", {}
+        
+        # Look for header row with date column
+        header_found = False
+        header_row = 0
+        for i in range(min(15, len(df))):
+            row_str = ' '.join([str(v).lower() for v in df.iloc[i].values if pd.notna(v)])
+            if 'date' in row_str and ('amount' in row_str or 'debit' in row_str or 'credit' in row_str):
+                header_found = True
+                header_row = i
+                break
+        
+        if not header_found:
+            return False, "Could not find column headers (expected 'Date' and 'Amount' columns). Make sure you're uploading a General Ledger export.", {}
+        
+        # Count data rows
+        data_rows = len(df) - header_row - 1
+        
+        # Try to detect date format from sample
+        date_format = "unknown"
+        for i in range(header_row + 1, min(header_row + 50, len(df))):
+            for val in df.iloc[i].values:
+                if pd.notna(val):
+                    val_str = str(val)
+                    if '/' in val_str:
+                        parts = val_str.split('/')
+                        if len(parts) >= 2 and parts[0].isdigit():
+                            first_num = int(parts[0])
+                            if first_num > 12:
+                                date_format = "dmy"
+                                break
+                            elif first_num <= 12:
+                                date_format = "mdy_or_dmy"
+                    elif hasattr(val, 'strftime'):
+                        date_format = "excel_date"
+                        break
+            if date_format != "unknown":
+                break
+        
+        return True, "File structure validated", {
+            "rows": data_rows,
+            "header_row": header_row,
+            "detected_date_format": date_format
+        }
+    except Exception as e:
+        return False, f"Could not read file: {str(e)}", {}
+
+
+def run_analysis(coa_path: str, gl_path: str, industry: str, date_format: str = "auto"):
     """Run the full analysis pipeline"""
     from gl_analyzer import parse_gl_with_mapping, build_financial_statements
     
@@ -612,19 +736,19 @@ def run_analysis(coa_path: str, gl_path: str, industry: str):
     with open(mapping_path, 'w') as f:
         json.dump({k: v.value for k, v in account_map.items()}, f)
     
-    # Run analysis
-    analysis = run_ga_analysis(gl_path, mapping_path, industry=industry)
+    # Run analysis with date format
+    analysis = run_ga_analysis(gl_path, mapping_path, industry=industry, date_format=date_format)
     
     # Also build P&L for display
     from gl_analyzer import load_account_mapping
     type_map = load_account_mapping(mapping_path)
-    accounts, transactions = parse_gl_with_mapping(gl_path, type_map)
+    accounts, transactions = parse_gl_with_mapping(gl_path, type_map, date_format=date_format)
     pnl_data, _ = build_financial_statements(accounts)
     
     # Cleanup
     os.unlink(mapping_path)
     
-    return analysis, account_map, pnl_data, transactions
+    return analysis, account_map, pnl_data, transactions, date_format
 
 
 # Create mock demo data
@@ -1687,14 +1811,52 @@ if analyze_btn and coa_file and gl_file and user:
         render_paywall()
         st.stop()
     
+    # Save uploaded files first
+    coa_path = save_uploaded_file(coa_file)
+    gl_path = save_uploaded_file(gl_file)
+    
+    # Validate files before processing
+    coa_valid, coa_msg, coa_info = validate_coa_file(coa_path)
+    gl_valid, gl_msg, gl_info = validate_gl_file(gl_path)
+    
+    if not coa_valid:
+        st.error(f"❌ **Chart of Accounts Error:** {coa_msg}")
+        st.info("""
+        **How to fix:**
+        1. Make sure you're uploading a Chart of Accounts export (not a different report)
+        2. Export from QBO: Settings → Chart of Accounts → Run Report → Export to Excel
+        3. Don't modify the Excel file before uploading
+        """)
+        os.unlink(coa_path)
+        os.unlink(gl_path)
+        st.stop()
+    
+    if not gl_valid:
+        st.error(f"❌ **General Ledger Error:** {gl_msg}")
+        st.info("""
+        **How to fix:**
+        1. Make sure you're uploading a General Ledger export (not a different report)
+        2. Export from QBO: Reports → General Ledger → Run Report → Export to Excel
+        3. Don't modify the Excel file before uploading
+        """)
+        os.unlink(coa_path)
+        os.unlink(gl_path)
+        st.stop()
+    
+    # Show validation info
+    st.success(f"✓ Files validated: COA ({coa_info.get('rows', 0)} accounts) | GL ({gl_info.get('rows', 0)} rows)")
+    
+    # Detect date format if auto
+    detected_format = gl_info.get('detected_date_format', 'unknown')
+    if date_format == "auto" and detected_format == "dmy":
+        st.info("📅 Detected DD/MM/YYYY date format (UK/EU/AU/CA style)")
+    
     with st.spinner("Analyzing expenses..."):
         try:
-            # Save uploaded files
-            coa_path = save_uploaded_file(coa_file)
-            gl_path = save_uploaded_file(gl_file)
-            
-            # Run analysis
-            analysis, account_map, pnl_data, transactions = run_analysis(coa_path, gl_path, industry)
+            # Run analysis with date format
+            analysis, account_map, pnl_data, transactions, used_date_format = run_analysis(
+                coa_path, gl_path, industry, date_format
+            )
             
             # Cleanup temp files
             os.unlink(coa_path)
@@ -1711,11 +1873,27 @@ if analyze_btn and coa_file and gl_file and user:
             st.session_state['pnl_data'] = pnl_data
             st.session_state['transactions'] = transactions
             st.session_state['industry'] = industry
+            st.session_state['date_format'] = used_date_format
             
             st.rerun()
             
         except Exception as e:
-            st.error(f"Error during analysis: {str(e)}")
+            # Cleanup on error
+            try:
+                os.unlink(coa_path)
+                os.unlink(gl_path)
+            except:
+                pass
+            
+            st.error(f"❌ **Analysis Error:** {str(e)}")
+            st.warning("""
+            **Troubleshooting tips:**
+            1. Try changing the **Date Format** in the sidebar settings
+            2. Make sure both files are direct QBO exports (not modified)
+            3. Check that the date range in your GL includes transaction data
+            
+            If the problem persists, please contact support with your file types and QBO region.
+            """)
             st.stop()
 
 # Display results if we have them
@@ -1725,6 +1903,7 @@ if 'analysis' in st.session_state:
     transactions = st.session_state.get('transactions', [])
     account_map = st.session_state.get('account_map', {})
     selected_industry = st.session_state.get('industry', 'default')
+    selected_date_format = st.session_state.get('date_format', 'auto')
     
     # Clear analysis button
     if st.sidebar.button("🔄 New Analysis", use_container_width=True):
@@ -1736,6 +1915,8 @@ if 'analysis' in st.session_state:
             del st.session_state['transactions']
         if 'industry' in st.session_state:
             del st.session_state['industry']
+        if 'date_format' in st.session_state:
+            del st.session_state['date_format']
         st.rerun()
     
     render_analysis(analysis, is_demo=False, pnl_data=pnl_data, transactions=transactions, account_map=account_map, industry=selected_industry)
