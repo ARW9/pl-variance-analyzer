@@ -122,6 +122,9 @@ def parse_gl_with_mapping(gl_file: str, account_map: Dict[str, AccountType], dat
     debit_col = find_col(['debit'], None)
     credit_col = find_col(['credit'], None)
     
+    # Track parent accounts for nested sub-accounts
+    parent_account_stack = []  # Stack to track parent hierarchy
+    
     # Parse accounts and transactions
     for i, row in df.iterrows():
         if i <= header_row:
@@ -140,10 +143,37 @@ def parse_gl_with_mapping(gl_file: str, account_map: Dict[str, AccountType], dat
             if not col0 and not col1:
                 continue
             
+            # Handle "Total for X" lines - pop parent when we see total
+            if col0.startswith("Total for "):
+                total_name = col0.replace("Total for ", "").replace(" with sub-accounts", "").strip()
+                # Pop matching parent from stack
+                if parent_account_stack and parent_account_stack[-1].lower() == total_name.lower():
+                    parent_account_stack.pop()
+                elif parent_account_stack:
+                    # Try to find and remove the matching parent
+                    for idx, parent in enumerate(reversed(parent_account_stack)):
+                        if parent.lower() == total_name.lower():
+                            parent_account_stack = parent_account_stack[:len(parent_account_stack)-idx-1]
+                            break
+                continue
+            
             # Check if this is an account header (has value in col0, nothing meaningful in col1)
             if col0 and (pd.isna(row[1]) or col1 == "" or col1 == "Beginning Balance") and not col0.startswith("Total"):
-                # This is an account name
-                current_account = col0.strip()
+                # This is an account name - could be parent or sub-account
+                raw_account_name = col0.strip()
+                
+                # Try to find as "Parent:SubAccount" first
+                full_account_name = raw_account_name
+                if parent_account_stack:
+                    # Try with parent prefix
+                    for depth in range(len(parent_account_stack), 0, -1):
+                        parent_path = ":".join(parent_account_stack[:depth])
+                        test_name = f"{parent_path}:{raw_account_name}"
+                        if test_name in account_map:
+                            full_account_name = test_name
+                            break
+                
+                current_account = full_account_name
                 # Look up type in mapping
                 current_account_type = account_map.get(current_account, AccountType.UNKNOWN)
                 
@@ -187,9 +217,17 @@ def parse_gl_with_mapping(gl_file: str, account_map: Dict[str, AccountType], dat
                         transaction_count=0,
                         transactions=[]
                     )
+                
+                # Track as potential parent (might have sub-accounts)
+                # Check if this account has children in COA
+                has_children = any(name.startswith(raw_account_name + ":") for name in account_map.keys())
+                if has_children:
+                    parent_account_stack = [raw_account_name]  # Reset to this as the new parent
+                elif not parent_account_stack or not any(name.startswith(parent_account_stack[0] + ":" + raw_account_name) for name in account_map.keys()):
+                    parent_account_stack = []  # Clear stack if this isn't a sub-account
             
-            # Skip all "Total for" lines - we'll calculate totals from transactions
-            elif col0.startswith("Total for ") or col0.startswith("Total "):
+            # Skip "Total" lines - already handled above for popping parent stack
+            elif col0.startswith("Total "):
                 continue
             
             # Otherwise it might be a transaction row
