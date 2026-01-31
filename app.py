@@ -1,6 +1,7 @@
 """
 P&L Variance Analyzer - Web App
-Upload GL + CoA exports, get instant expense analysis
+Upload P&L by Month export, get instant variance analysis
+GL optional (for top vendor breakdown only)
 """
 
 import streamlit as st
@@ -510,7 +511,7 @@ with st.sidebar:
         gl_file = st.file_uploader(
             "📋 General Ledger (.csv) — Optional",
             type=['csv'],
-            help="Optional: For drilling into transactions. Export from QBO: Reports → General Ledger → Export to CSV"
+            help="Optional: Only needed for top vendor analysis. Export from QBO: Reports → General Ledger → Export to CSV"
         )
         
         st.divider()
@@ -605,7 +606,7 @@ with st.sidebar:
         **General Ledger (Optional):**
         Reports → General Ledger → Set date range → Export to CSV
         
-        *Use the GL for drilling into specific transactions*
+        *Only needed for top vendor analysis - all P&L figures come from the P&L report*
         """)
     
     with st.expander("💰 Pricing"):
