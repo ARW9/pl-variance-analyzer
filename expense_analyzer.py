@@ -664,12 +664,29 @@ def parse_qbo_gl(gl_file: str, account_map: Dict[str, AccountType]) -> Tuple[Dic
                 current_account = col0
                 current_account_type = account_map.get(current_account, AccountType.UNKNOWN)
                 
-                # Try partial matching if exact match fails
+                # Try smarter matching if exact match fails
                 if current_account_type == AccountType.UNKNOWN:
+                    # Priority 1: Account name matches end of CoA path (e.g., "Sales" matches "SALES INCOME:Sales")
                     for mapped_name, mapped_type in account_map.items():
-                        if current_account in mapped_name or mapped_name in current_account:
+                        if mapped_name.endswith(":" + current_account) or mapped_name == current_account:
                             current_account_type = mapped_type
                             break
+                    
+                    # Priority 2: CoA path ends with account name (case-insensitive)
+                    if current_account_type == AccountType.UNKNOWN:
+                        for mapped_name, mapped_type in account_map.items():
+                            if mapped_name.lower().endswith(":" + current_account.lower()):
+                                current_account_type = mapped_type
+                                break
+                    
+                    # Priority 3: Account name is a significant part of CoA name (not just substring)
+                    if current_account_type == AccountType.UNKNOWN:
+                        for mapped_name, mapped_type in account_map.items():
+                            # Split CoA path and check if account matches any segment
+                            segments = mapped_name.split(":")
+                            if current_account in segments or current_account.lower() in [s.lower() for s in segments]:
+                                current_account_type = mapped_type
+                                break
                 
                 if current_account not in accounts:
                     accounts[current_account] = AccountSummary(
