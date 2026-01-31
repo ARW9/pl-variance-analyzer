@@ -1377,12 +1377,58 @@ def render_pnl(pnl_data: dict, title: str = "📊 Profit & Loss Statement"):
     return totals
 
 
-def render_analysis(analysis, is_demo=False, pnl_data=None, transactions=None, account_map=None, industry="default"):
+def render_analysis(analysis, is_demo=False, pnl_data=None, transactions=None, account_map=None, industry="default", validation_result=None):
     """Render analysis results - used for both real and demo data"""
     
     if is_demo:
         st.markdown('<span style="background: #dc2626; color: white; padding: 4px 12px; border-radius: 20px; font-size: 0.75rem; font-weight: 700;">SAMPLE ANALYSIS</span>', unsafe_allow_html=True)
         st.caption("This is example data showing what your analysis will look like")
+    
+    # Validation details expander (only for real analysis)
+    if validation_result and not is_demo:
+        if validation_result.passed:
+            with st.expander("✅ Parsing Validation Passed — Click for Details", expanded=False):
+                st.success("All parsed account totals match the GL source file.")
+                st.write(f"**Accounts verified:** {len(validation_result.discrepancies) if not validation_result.passed else 'All matched'}")
+                
+                if validation_result.warnings:
+                    st.write("**Warnings:**")
+                    for w in validation_result.warnings:
+                        st.write(f"- {w}")
+                
+                if validation_result.missing_accounts:
+                    st.write(f"**COA accounts with no transactions ({len(validation_result.missing_accounts)}):**")
+                    st.caption("These accounts exist in your Chart of Accounts but had no activity in this GL period.")
+                    for acc in validation_result.missing_accounts[:30]:
+                        st.write(f"- {acc}")
+                    if len(validation_result.missing_accounts) > 30:
+                        st.write(f"_...and {len(validation_result.missing_accounts) - 30} more_")
+        else:
+            with st.expander("⚠️ Parsing Validation Issues — Click for Details", expanded=True):
+                st.warning(f"Found {validation_result.total_discrepancies} discrepancies between parsed totals and GL source.")
+                st.write("**The analysis may contain inaccuracies.** Please verify key totals against your QBO reports.")
+                
+                st.write("---")
+                st.write("**Discrepancies Found:**")
+                
+                for d in validation_result.discrepancies:
+                    col1, col2, col3, col4 = st.columns([3, 2, 2, 2])
+                    with col1:
+                        st.write(f"**{d['account']}**")
+                    with col2:
+                        st.write(f"Expected: ${d['expected']:,.2f}")
+                    with col3:
+                        st.write(f"Got: ${d['actual']:,.2f}")
+                    with col4:
+                        variance = d['variance']
+                        color = "red" if variance != 0 else "green"
+                        st.markdown(f"<span style='color:{color}'>Variance: ${variance:+,.2f}</span>", unsafe_allow_html=True)
+                
+                if validation_result.warnings:
+                    st.write("---")
+                    st.write("**Warnings:**")
+                    for w in validation_result.warnings:
+                        st.write(f"- {w}")
     
     # Period selection UI (only if we have transactions)
     if transactions and not is_demo:
@@ -1970,6 +2016,7 @@ if 'analysis' in st.session_state:
     account_map = st.session_state.get('account_map', {})
     selected_industry = st.session_state.get('industry', 'default')
     selected_date_format = st.session_state.get('date_format', 'auto')
+    validation_result = st.session_state.get('validation_result')
     
     # Clear analysis button
     if st.sidebar.button("🔄 New Analysis", use_container_width=True):
@@ -1983,9 +2030,11 @@ if 'analysis' in st.session_state:
             del st.session_state['industry']
         if 'date_format' in st.session_state:
             del st.session_state['date_format']
+        if 'validation_result' in st.session_state:
+            del st.session_state['validation_result']
         st.rerun()
     
-    render_analysis(analysis, is_demo=False, pnl_data=pnl_data, transactions=transactions, account_map=account_map, industry=selected_industry)
+    render_analysis(analysis, is_demo=False, pnl_data=pnl_data, transactions=transactions, account_map=account_map, industry=selected_industry, validation_result=validation_result)
     
     # Show upgrade CTA for free users
     if user and not user.get("is_pro"):
