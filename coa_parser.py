@@ -146,11 +146,21 @@ def parse_qbo_coa(file_path: str) -> Dict[str, AccountType]:
     
     # If we still can't find columns, try positional guessing
     if not name_col:
-        # First non-empty looking column is probably the name
+        # Look for a column with actual text names (not just numbers)
         for col in df.columns:
-            if 'unnamed' not in col and col not in ['type', 'balance', 'total']:
-                name_col = col
-                break
+            if 'unnamed' not in col.lower() and col not in ['type', 'balance', 'total']:
+                sample_vals = df[col].dropna().head(20).astype(str).tolist()
+                # Check if values are mostly text (not pure numbers)
+                text_count = sum(1 for v in sample_vals if v and not v.replace('-', '').replace('.', '').isdigit())
+                if text_count > len(sample_vals) * 0.5:  # More than half are text
+                    name_col = col
+                    break
+        # Fallback: just use first column if nothing else works
+        if not name_col:
+            for col in df.columns:
+                if 'unnamed' not in col.lower():
+                    name_col = col
+                    break
     
     if not type_col:
         # Look for a column that contains account type values
@@ -162,6 +172,16 @@ def parse_qbo_coa(file_path: str) -> Dict[str, AccountType]:
     
     if not name_col or not type_col:
         raise ValueError(f"Could not find Name and Type columns. Found: {list(df.columns)}")
+    
+    # Debug: store detected columns for troubleshooting
+    _coa_debug_info = {
+        'columns': list(df.columns),
+        'name_col': name_col,
+        'type_col': type_col,
+        'number_col': number_col,
+        'header_row': header_row,
+        'sample_row': df.iloc[0].to_dict() if len(df) > 0 else {}
+    }
     
     # Build the mapping
     account_map = {}

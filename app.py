@@ -1545,6 +1545,15 @@ def render_analysis(analysis, is_demo=False, pnl_data=None, transactions=None, a
                     st.write(f"**Sample unmatched GL accounts:** {list(unmatched_gl)[:10]}")
                 if coa_accounts:
                     st.write(f"**Sample COA accounts:** {list(coa_accounts)[:10]}")
+                
+                # Show what the GL names look like stripped
+                if unmatched_gl:
+                    import re
+                    stripped_samples = []
+                    for name in list(unmatched_gl)[:5]:
+                        stripped = re.sub(r'^\d+[\s\-]+', '', name).strip()
+                        stripped_samples.append(f"'{name}' -> '{stripped}'")
+                    st.write(f"**GL names stripped:** {stripped_samples}")
     
     col1, col2, col3, col4 = st.columns(4)
     
