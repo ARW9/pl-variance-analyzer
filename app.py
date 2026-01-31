@@ -1642,6 +1642,9 @@ def render_analysis(analysis, is_demo=False, pnl_data=None, transactions=None, a
         st.markdown('<span style="background: #dc2626; color: white; padding: 4px 12px; border-radius: 20px; font-size: 0.75rem; font-weight: 700;">SAMPLE ANALYSIS</span>', unsafe_allow_html=True)
         st.caption("This is example data showing what your analysis will look like")
     
+    # Track view mode for conditional rendering
+    show_expense_summary = True
+    
     # Period selection UI (only if we have transactions)
     if transactions and not is_demo:
         st.header("📅 Period Selection")
@@ -1667,6 +1670,7 @@ def render_analysis(analysis, is_demo=False, pnl_data=None, transactions=None, a
                 )
             
             if view_mode == "Compare Two Months":
+                show_expense_summary = False
                 col1, col2 = st.columns(2)
                 with col1:
                     prior_month = st.selectbox(
@@ -1716,170 +1720,171 @@ def render_analysis(analysis, is_demo=False, pnl_data=None, transactions=None, a
         render_pnl(pnl_data, qbo_totals=qbo_totals)
         st.divider()
     
-    # Summary metrics
-    st.header("💰 Expense Analysis Summary")
-    
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        st.metric("Total Expenses", format_currency(analysis.total_ga_expenses))
-    
-    with col2:
-        st.metric("% of Revenue", f"{analysis.ga_as_pct_of_revenue:.1f}%")
-    
-    with col3:
-        fixed_pct = (analysis.fixed_costs / analysis.total_ga_expenses * 100) if analysis.total_ga_expenses > 0 else 0
-        st.metric("Fixed Costs", format_currency(analysis.fixed_costs), f"{fixed_pct:.0f}% of total")
-    
-    # Industry Benchmark Comparison
-    benchmark = INDUSTRY_BENCHMARKS.get(industry, INDUSTRY_BENCHMARKS["default"])
-    ga_pct = analysis.ga_as_pct_of_revenue
-    
-    if industry != "default":
-        industry_label = industry.replace("_", " ").title()
-        if ga_pct < benchmark["low"]:
-            status = "below"
-            status_color = "#f59e0b"  # warning - might be underinvesting
-            status_icon = "📉"
-            status_text = f"Below typical range — may indicate underinvestment in operations"
-        elif ga_pct > benchmark["high"]:
-            status = "above"
-            status_color = "#dc2626"  # alert
-            status_icon = "📈"
-            status_text = f"Above typical range — review for cost reduction opportunities"
-        else:
-            status = "within"
-            status_color = "#22c55e"  # good
-            status_icon = "✓"
-            status_text = f"Within healthy range for your industry"
+    # Summary metrics (only for Full Year view, not month comparison)
+    if show_expense_summary:
+        st.header("💰 Expense Analysis Summary")
         
-        st.markdown(f"""
-        <div style="background: rgba(23, 23, 23, 0.8); backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 1.25rem 1.5rem; margin: 1rem 0;">
-            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
-                <div>
-                    <span style="color: #a3a3a3; font-size: 0.85rem;">Industry Benchmark: <strong style="color: white;">{industry_label}</strong></span>
-                    <div style="margin-top: 0.5rem;">
-                        <span style="color: {status_color}; font-weight: 600; font-size: 1.1rem;">{status_icon} Your OpEx: {ga_pct:.1f}%</span>
-                        <span style="color: #737373; margin: 0 0.75rem;">|</span>
-                        <span style="color: #a3a3a3;">Typical range: {benchmark['low']}% – {benchmark['high']}%</span>
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            st.metric("Total Expenses", format_currency(analysis.total_ga_expenses))
+        
+        with col2:
+            st.metric("% of Revenue", f"{analysis.ga_as_pct_of_revenue:.1f}%")
+        
+        with col3:
+            fixed_pct = (analysis.fixed_costs / analysis.total_ga_expenses * 100) if analysis.total_ga_expenses > 0 else 0
+            st.metric("Fixed Costs", format_currency(analysis.fixed_costs), f"{fixed_pct:.0f}% of total")
+    
+        # Industry Benchmark Comparison
+        benchmark = INDUSTRY_BENCHMARKS.get(industry, INDUSTRY_BENCHMARKS["default"])
+        ga_pct = analysis.ga_as_pct_of_revenue
+    
+        if industry != "default":
+            industry_label = industry.replace("_", " ").title()
+            if ga_pct < benchmark["low"]:
+                status = "below"
+                status_color = "#f59e0b"  # warning - might be underinvesting
+                status_icon = "📉"
+                status_text = f"Below typical range — may indicate underinvestment in operations"
+            elif ga_pct > benchmark["high"]:
+                status = "above"
+                status_color = "#dc2626"  # alert
+                status_icon = "📈"
+                status_text = f"Above typical range — review for cost reduction opportunities"
+            else:
+                status = "within"
+                status_color = "#22c55e"  # good
+                status_icon = "✓"
+                status_text = f"Within healthy range for your industry"
+        
+            st.markdown(f"""
+            <div style="background: rgba(23, 23, 23, 0.8); backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 1.25rem 1.5rem; margin: 1rem 0;">
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+                    <div>
+                        <span style="color: #a3a3a3; font-size: 0.85rem;">Industry Benchmark: <strong style="color: white;">{industry_label}</strong></span>
+                        <div style="margin-top: 0.5rem;">
+                            <span style="color: {status_color}; font-weight: 600; font-size: 1.1rem;">{status_icon} Your OpEx: {ga_pct:.1f}%</span>
+                            <span style="color: #737373; margin: 0 0.75rem;">|</span>
+                            <span style="color: #a3a3a3;">Typical range: {benchmark['low']}% – {benchmark['high']}%</span>
+                        </div>
                     </div>
+                    <div style="color: #a3a3a3; font-size: 0.85rem; max-width: 300px;">{status_text}</div>
                 </div>
-                <div style="color: #a3a3a3; font-size: 0.85rem; max-width: 300px;">{status_text}</div>
             </div>
-        </div>
-        """, unsafe_allow_html=True)
+            """, unsafe_allow_html=True)
     
-    st.divider()
+        st.divider()
     
-    # Tabs
-    tab1, tab2, tab3, tab4 = st.tabs(["📖 How to Use This Data", "🚨 Anomalies", "📊 Volatile", "✓ Consistent"])
+        # Tabs
+        tab1, tab2, tab3, tab4 = st.tabs(["📖 How to Use This Data", "🚨 Anomalies", "📊 Volatile", "✓ Consistent"])
     
-    with tab1:
-        st.subheader("Understanding Your Numbers")
-        st.markdown("""
-**What Each Metric Means:**
+        with tab1:
+            st.subheader("Understanding Your Numbers")
+            st.markdown("""
+    **What Each Metric Means:**
 
----
+    ---
 
-**Total Expenses**  
-The sum of all operating expenses from your P&L for the period analyzed.  
-*📈 Going up?* You're spending more — could be growth (good) or cost creep (review needed).  
-*📉 Going down?* You're spending less — efficiency gains or possibly underinvesting.
+    **Total Expenses**  
+    The sum of all operating expenses from your P&L for the period analyzed.  
+    *📈 Going up?* You're spending more — could be growth (good) or cost creep (review needed).  
+    *📉 Going down?* You're spending less — efficiency gains or possibly underinvesting.
 
----
+    ---
 
-**% of Revenue**  
-How much of every dollar earned goes to operating expenses.  
-*📈 Going up?* Expenses growing faster than revenue — margins shrinking. Time to review costs.  
-*📉 Going down?* You're getting more efficient — each dollar of revenue costs less to earn.
+    **% of Revenue**  
+    How much of every dollar earned goes to operating expenses.  
+    *📈 Going up?* Expenses growing faster than revenue — margins shrinking. Time to review costs.  
+    *📉 Going down?* You're getting more efficient — each dollar of revenue costs less to earn.
 
----
+    ---
 
-**Fixed Costs**  
-The sum of all expenses in the **✓ Consistent** tab — items with low month-to-month variance (CV < 15%).  
-*Why it matters:* High fixed costs = less flexibility. If revenue drops, these costs don't.  
-*Note:* This total matches the Consistent tab. Variable Costs = everything else (Volatile + Anomalies).
+    **Fixed Costs**  
+    The sum of all expenses in the **✓ Consistent** tab — items with low month-to-month variance (CV < 15%).  
+    *Why it matters:* High fixed costs = less flexibility. If revenue drops, these costs don't.  
+    *Note:* This total matches the Consistent tab. Variable Costs = everything else (Volatile + Anomalies).
 
----
+    ---
 
-**🚨 Anomalies Tab**  
-Expenses that *should* be consistent (like rent or insurance) but aren't.  
-*What to look for:* Unexpected spikes might be billing errors, rate increases, or one-time charges that got coded wrong.
+    **🚨 Anomalies Tab**  
+    Expenses that *should* be consistent (like rent or insurance) but aren't.  
+    *What to look for:* Unexpected spikes might be billing errors, rate increases, or one-time charges that got coded wrong.
 
----
+    ---
 
-**📊 Volatile Tab**  
-Expenses that naturally vary month-to-month.  
-*What to look for:* Big swings might reveal seasonal patterns or areas where spending isn't controlled.
+    **📊 Volatile Tab**  
+    Expenses that naturally vary month-to-month.  
+    *What to look for:* Big swings might reveal seasonal patterns or areas where spending isn't controlled.
 
----
+    ---
 
-**✓ Consistent Tab**  
-Expenses that are predictable and stable.  
-*What it means:* These are your "set and forget" costs — good for budgeting.
-        """)
+    **✓ Consistent Tab**  
+    Expenses that are predictable and stable.  
+    *What it means:* These are your "set and forget" costs — good for budgeting.
+            """)
     
-    with tab2:
-        anomalies = [c for c in analysis.categories if c.has_anomaly]
-        if anomalies:
-            st.error(f"Found {len(anomalies)} expense categories that should be consistent but aren't")
-            for cat in anomalies:
-                st.markdown(f"""
-                <div class="anomaly-card">
-                    <h4>⚠️ {cat.name}</h4>
-                    <p><strong>Total:</strong> {format_currency(cat.total)} &nbsp;|&nbsp; <strong>Monthly Avg:</strong> {format_currency(cat.monthly_avg)}</p>
-                    <p><strong>Variance:</strong> {cat.coefficient_of_variation:.0%} <span style="color: #fca5a5;">(should be &lt;15%)</span></p>
-                    <p><strong>Range:</strong> {format_currency(max(0, cat.monthly_avg - cat.monthly_std))} - {format_currency(cat.monthly_avg + cat.monthly_std)}</p>
-                </div>
-                """, unsafe_allow_html=True)
-                if cat.monthly_trend:
-                    df = pd.DataFrame([{"Month": k, "Amount": v} for k, v in sorted(cat.monthly_trend.items())])
-                    st.line_chart(df.set_index("Month"), color="#dc2626")
-                if cat.top_vendors and cat.top_vendors[0][0] != "Unknown":
-                    st.caption(f"🏢 Top Vendor: {cat.top_vendors[0][0]}")
-                st.markdown("---")
-        else:
-            st.success("✓ No anomalies detected!")
-    
-    with tab3:
-        volatile = [c for c in analysis.categories if not c.is_consistent and not c.has_anomaly and c.coefficient_of_variation > CV_VOLATILE_THRESHOLD]
-        if volatile:
-            st.warning(f"Found {len(volatile)} volatile expense categories worth reviewing")
-            for cat in volatile[:10]:
-                with st.expander(f"📊 {cat.name} — {format_currency(cat.total)} ({cat.coefficient_of_variation:.0%} variance)"):
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        st.write(f"**% of Revenue:** {cat.pct_of_revenue:.1f}%")
-                        st.write(f"**Transactions:** {cat.transaction_count}")
-                        st.write(f"**Avg Transaction:** {format_currency(cat.avg_transaction)}")
-                    with col2:
-                        if cat.top_vendors:
-                            st.write("**Top Vendors:**")
-                            for vendor, amount in cat.top_vendors[:3]:
-                                if vendor != "Unknown":
-                                    st.write(f"- {vendor}: {format_currency(amount)}")
+        with tab2:
+            anomalies = [c for c in analysis.categories if c.has_anomaly]
+            if anomalies:
+                st.error(f"Found {len(anomalies)} expense categories that should be consistent but aren't")
+                for cat in anomalies:
+                    st.markdown(f"""
+                    <div class="anomaly-card">
+                        <h4>⚠️ {cat.name}</h4>
+                        <p><strong>Total:</strong> {format_currency(cat.total)} &nbsp;|&nbsp; <strong>Monthly Avg:</strong> {format_currency(cat.monthly_avg)}</p>
+                        <p><strong>Variance:</strong> {cat.coefficient_of_variation:.0%} <span style="color: #fca5a5;">(should be &lt;15%)</span></p>
+                        <p><strong>Range:</strong> {format_currency(max(0, cat.monthly_avg - cat.monthly_std))} - {format_currency(cat.monthly_avg + cat.monthly_std)}</p>
+                    </div>
+                    """, unsafe_allow_html=True)
                     if cat.monthly_trend:
                         df = pd.DataFrame([{"Month": k, "Amount": v} for k, v in sorted(cat.monthly_trend.items())])
-                        st.line_chart(df.set_index("Month"), color="#f59e0b")
-        else:
-            st.success("✓ No highly volatile expenses found.")
+                        st.line_chart(df.set_index("Month"), color="#dc2626")
+                    if cat.top_vendors and cat.top_vendors[0][0] != "Unknown":
+                        st.caption(f"🏢 Top Vendor: {cat.top_vendors[0][0]}")
+                    st.markdown("---")
+            else:
+                st.success("✓ No anomalies detected!")
     
-    with tab4:
-        consistent = [c for c in analysis.categories if c.is_consistent and not c.has_anomaly]
-        if consistent:
-            consistent_total = sum(c.total for c in consistent)
-            st.success(f"✓ {len(consistent)} categories are stable ({format_currency(consistent_total)} total)")
-            df = pd.DataFrame([{"Category": c.name, "Total": c.total, "CV": f"{c.coefficient_of_variation:.0%}", "Status": "✓ Stable" if c.coefficient_of_variation < 0.10 else "~ Mostly Stable"} for c in sorted(consistent, key=lambda x: -x.total)])
-            st.dataframe(df, column_config={"Total": st.column_config.NumberColumn(format="$%.2f")}, hide_index=True, use_container_width=True)
-        else:
-            st.info("No consistently stable expenses identified.")
+        with tab3:
+            volatile = [c for c in analysis.categories if not c.is_consistent and not c.has_anomaly and c.coefficient_of_variation > CV_VOLATILE_THRESHOLD]
+            if volatile:
+                st.warning(f"Found {len(volatile)} volatile expense categories worth reviewing")
+                for cat in volatile[:10]:
+                    with st.expander(f"📊 {cat.name} — {format_currency(cat.total)} ({cat.coefficient_of_variation:.0%} variance)"):
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            st.write(f"**% of Revenue:** {cat.pct_of_revenue:.1f}%")
+                            st.write(f"**Transactions:** {cat.transaction_count}")
+                            st.write(f"**Avg Transaction:** {format_currency(cat.avg_transaction)}")
+                        with col2:
+                            if cat.top_vendors:
+                                st.write("**Top Vendors:**")
+                                for vendor, amount in cat.top_vendors[:3]:
+                                    if vendor != "Unknown":
+                                        st.write(f"- {vendor}: {format_currency(amount)}")
+                        if cat.monthly_trend:
+                            df = pd.DataFrame([{"Month": k, "Amount": v} for k, v in sorted(cat.monthly_trend.items())])
+                            st.line_chart(df.set_index("Month"), color="#f59e0b")
+            else:
+                st.success("✓ No highly volatile expenses found.")
     
-    # Monthly trend
-    st.divider()
-    st.header("📅 Monthly Expense Trend")
-    if analysis.monthly_totals:
-        df = pd.DataFrame([{"Month": k, "Total Expenses": v} for k, v in sorted(analysis.monthly_totals.items())])
-        st.line_chart(df.set_index("Month"), color="#dc2626")
+        with tab4:
+            consistent = [c for c in analysis.categories if c.is_consistent and not c.has_anomaly]
+            if consistent:
+                consistent_total = sum(c.total for c in consistent)
+                st.success(f"✓ {len(consistent)} categories are stable ({format_currency(consistent_total)} total)")
+                df = pd.DataFrame([{"Category": c.name, "Total": c.total, "CV": f"{c.coefficient_of_variation:.0%}", "Status": "✓ Stable" if c.coefficient_of_variation < 0.10 else "~ Mostly Stable"} for c in sorted(consistent, key=lambda x: -x.total)])
+                st.dataframe(df, column_config={"Total": st.column_config.NumberColumn(format="$%.2f")}, hide_index=True, use_container_width=True)
+            else:
+                st.info("No consistently stable expenses identified.")
+    
+        # Monthly trend
+        st.divider()
+        st.header("📅 Monthly Expense Trend")
+        if analysis.monthly_totals:
+            df = pd.DataFrame([{"Month": k, "Total Expenses": v} for k, v in sorted(analysis.monthly_totals.items())])
+            st.line_chart(df.set_index("Month"), color="#dc2626")
 
 
 # Main content - Show landing page if no analysis yet
@@ -1908,7 +1913,7 @@ if 'analysis' not in st.session_state:
             2. Search for **"Profit and Loss"**
             3. Click **Customize**
             4. Under **Display**, select **Months** for columns
-            5. Set your **date range** (e.g., Full Year)
+            5. Set your **date range** to **This Fiscal Year-to-Last Month**
             6. Click **Run Report**
             7. Click **Export** → **Export to CSV**
             
