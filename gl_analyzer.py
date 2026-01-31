@@ -116,7 +116,11 @@ def parse_gl_with_mapping(gl_file: str, account_map: Dict[str, AccountType], dat
     
     # Helper function to match bilingual account names
     def lookup_account_type(name: str) -> AccountType:
-        """Look up account type, handling bilingual names like 'English / French'"""
+        """Look up account type, handling various naming conventions:
+        - Bilingual names like 'English / French'
+        - Parent:Child where GL has just Child (e.g., 'Membership Sales' vs 'Services Income:Membership Sales')
+        - Account numbers stripped or present
+        """
         # Direct match
         if name in account_map:
             return account_map[name]
@@ -128,17 +132,32 @@ def parse_gl_with_mapping(gl_file: str, account_map: Dict[str, AccountType], dat
                 part = part.strip()
                 if part in account_map:
                     return account_map[part]
-                # Also try case-insensitive
                 for coa_name, coa_type in account_map.items():
                     if coa_name.lower() == part.lower():
                         return coa_type
         
-        # Case-insensitive match
         name_lower = name.lower()
+        
+        # Case-insensitive match
         for coa_name, coa_type in account_map.items():
             if coa_name.lower() == name_lower:
                 return coa_type
-            # Check if COA name is contained in GL name (for bilingual)
+        
+        # Check if GL name matches the end of a COA parent:child name
+        # e.g., "Membership Sales - Mariana Tek" matches "Services Income:Membership Sales - Mariana Tek"
+        for coa_name, coa_type in account_map.items():
+            coa_lower = coa_name.lower()
+            # Match if COA ends with :GL_name
+            if coa_lower.endswith(":" + name_lower):
+                return coa_type
+            # Match if GL name is contained after a colon
+            if ":" in coa_lower:
+                coa_child = coa_lower.split(":")[-1].strip()
+                if coa_child == name_lower:
+                    return coa_type
+        
+        # Check if COA name is contained in GL name (for bilingual)
+        for coa_name, coa_type in account_map.items():
             if coa_name.lower() in name_lower:
                 return coa_type
         
@@ -180,6 +199,7 @@ def parse_gl_with_mapping(gl_file: str, account_map: Dict[str, AccountType], dat
     vendor_col = find_col(['name', 'vendor', 'payee', 'customer'], 5)
     desc_col = find_col(['memo', 'description', 'desc'], 6)
     amount_col = find_col(['amount'], 8)
+    split_col = find_col(['split'], 7)  # Split account column for P&L categorization
     
     # Also check for debit/credit columns if no amount column
     debit_col = find_col(['debit'], None)
@@ -357,6 +377,36 @@ def parse_gl_with_mapping(gl_file: str, account_map: Dict[str, AccountType], dat
                     if current_account in accounts:
                         accounts[current_account].transactions.append(txn)
                         accounts[current_account].transaction_count += 1
+                    
+                    # Also track the SPLIT account (this is where P&L accounts often appear)
+                    if split_col and len(row) > split_col and pd.notna(row[split_col]):
+                        split_account = str(row[split_col]).strip()
+                        if split_account and split_account != "nan" and split_account != "-Split-":
+                            # Look up split account type
+                            split_account_type = lookup_account_type(split_account)
+                            
+                            # Create split account entry if doesn't exist
+                            if split_account not in accounts:
+                                accounts[split_account] = AccountSummary(
+                                    name=split_account,
+                                    account_type=split_account_type,
+                                    total=0,
+                                    transaction_count=0,
+                                    transactions=[]
+                                )
+                            
+                            # Create transaction for split account (opposite sign for double-entry)
+                            split_txn = Transaction(
+                                date=date,
+                                account=split_account,
+                                account_type=split_account_type,
+                                description=description,
+                                amount=-amount,  # Opposite sign
+                                vendor=vendor
+                            )
+                            accounts[split_account].transactions.append(split_txn)
+                            accounts[split_account].transaction_count += 1
+                            all_transactions.append(split_txn)
         except Exception as e:
             # Skip malformed rows but continue processing
             continue
