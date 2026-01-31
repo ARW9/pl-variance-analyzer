@@ -157,8 +157,36 @@ def parse_gl_with_mapping(gl_file: str, account_map: Dict[str, AccountType], dat
                             break
                 continue
             
-            # Check if this is an account header (has value in col0, nothing meaningful in col1)
-            if col0 and (pd.isna(row[1]) or col1 == "" or col1 == "Beginning Balance") and not col0.startswith("Total"):
+            # Check if this is an account header
+            # Traditional check: col0 has value, col1 is empty or "Beginning Balance"
+            # Extended check: col0 matches a known account name (handles cases where first row is a transaction)
+            is_account_header = False
+            if col0 and not col0.startswith("Total"):
+                # Traditional detection
+                if pd.isna(row[1]) or col1 == "" or col1 == "Beginning Balance":
+                    is_account_header = True
+                else:
+                    # Check if col0 matches a known account name from COA
+                    # This catches accounts like "Bank Fees" that might not have a Beginning Balance row
+                    col0_lower = col0.lower()
+                    for mapped_name in account_map.keys():
+                        mapped_lower = mapped_name.lower()
+                        # Direct match or match at end of parent:child path
+                        if (col0_lower == mapped_lower or 
+                            mapped_lower.endswith(":" + col0_lower) or
+                            col0_lower.endswith(":" + mapped_lower)):
+                            is_account_header = True
+                            break
+                    
+                    # Also check if it looks like an account name pattern (not a date or number)
+                    if not is_account_header:
+                        import re
+                        # If col0 doesn't look like a date and col1 looks like a date, it's probably an account header
+                        date_pattern = r'^\d{1,2}[/\-]\d{1,2}[/\-]\d{2,4}$'
+                        if not re.match(date_pattern, col0) and col1 and re.match(date_pattern, col1):
+                            is_account_header = True
+            
+            if is_account_header:
                 # This is an account name - could be parent or sub-account
                 raw_account_name = col0.strip()
                 
@@ -225,13 +253,21 @@ def parse_gl_with_mapping(gl_file: str, account_map: Dict[str, AccountType], dat
                     parent_account_stack = [raw_account_name]  # Reset to this as the new parent
                 elif not parent_account_stack or not any(name.startswith(parent_account_stack[0] + ":" + raw_account_name) for name in account_map.keys()):
                     parent_account_stack = []  # Clear stack if this isn't a sub-account
+                
+                # If this row also has transaction data (extended detection case),
+                # fall through to transaction parsing below (don't continue)
+                if col1 and col1 != "Beginning Balance" and col1 != "nan":
+                    # This row has both account header and transaction - parse the transaction too
+                    pass  # Fall through to transaction parsing
+                else:
+                    continue  # No transaction on this row, move to next row
             
             # Skip "Total" lines - already handled above for popping parent stack
-            elif col0.startswith("Total "):
+            if col0.startswith("Total "):
                 continue
             
-            # Otherwise it might be a transaction row
-            elif current_account and col1 and col1 != "nan" and col1 != "Beginning Balance":
+            # Check if this is a transaction row
+            if current_account and col1 and col1 != "nan" and col1 != "Beginning Balance":
                 # Get date from detected column
                 date_val = row[date_col] if date_col and len(row) > date_col else row[1]
                 date = ""

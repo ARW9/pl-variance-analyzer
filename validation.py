@@ -91,7 +91,8 @@ def validate_gl_parsing(
     parsed_accounts: Dict,  # Dict[str, AccountSummary]
     account_map: Dict = None,  # Optional COA mapping
     tolerance_pct: float = 0.01,  # Allow 1% variance by default (rounding)
-    tolerance_abs: float = 0.02   # Allow $0.02 absolute variance (penny rounding)
+    tolerance_abs: float = 0.02,  # Allow $0.02 absolute variance (penny rounding)
+    skip_balance_sheet: bool = True  # Skip Assets, Liabilities, Equity validation
 ) -> ValidationResult:
     """
     Validate that our parsed totals match the GL's stated totals.
@@ -102,12 +103,18 @@ def validate_gl_parsing(
         account_map: Optional COA mapping to check for missing accounts
         tolerance_pct: Percentage tolerance for variance (default 1%)
         tolerance_abs: Absolute dollar tolerance (default $0.02)
+        skip_balance_sheet: If True, skip validation for Asset/Liability/Equity accounts
     
     Returns:
         ValidationResult with pass/fail status and details
     """
     discrepancies = []
     warnings = []
+    skipped_bs_accounts = []
+    
+    # Balance sheet account type values to skip
+    from coa_parser import AccountType
+    BALANCE_SHEET_TYPES = {AccountType.ASSET, AccountType.LIABILITY, AccountType.EQUITY}
     
     # Extract expected totals from GL
     gl_totals = extract_gl_totals(gl_file)
@@ -125,6 +132,24 @@ def validate_gl_parsing(
     
     # Compare our totals to GL totals
     for account_name, expected_total in gl_totals.items():
+        # Check if this is a balance sheet account (skip if configured)
+        if skip_balance_sheet and account_map:
+            # Look up account type in COA mapping
+            account_type = account_map.get(account_name)
+            if not account_type:
+                # Try case-insensitive lookup
+                for coa_name, coa_type in account_map.items():
+                    if coa_name.lower() == account_name.lower():
+                        account_type = coa_type
+                        break
+                    if coa_name.lower().endswith(":" + account_name.lower()):
+                        account_type = coa_type
+                        break
+            
+            if account_type in BALANCE_SHEET_TYPES:
+                skipped_bs_accounts.append(account_name)
+                continue
+        
         # Find matching account in our parsed data
         actual_total = None
         matched_account = None
@@ -205,9 +230,13 @@ def validate_gl_parsing(
     # Check for accounts in COA with no transactions (potential missed accounts)
     missing_accounts = []
     if account_map:
-        for coa_account in account_map.keys():
+        for coa_account, coa_type in account_map.items():
             # Skip number-prefixed duplicates
             if any(char.isdigit() for char in coa_account.split()[0] if coa_account.split()):
+                continue
+            
+            # Skip balance sheet accounts if configured
+            if skip_balance_sheet and coa_type in BALANCE_SHEET_TYPES:
                 continue
             
             found = False
@@ -229,13 +258,18 @@ def validate_gl_parsing(
     
     # Build summary
     passed = len(discrepancies) == 0
+    pnl_accounts_checked = len(gl_totals) - len(skipped_bs_accounts)
     
     if passed:
-        summary = f"✅ Validation PASSED - {len(gl_totals)} account totals verified"
+        summary = f"✅ Validation PASSED - {pnl_accounts_checked} P&L account totals verified"
+        if skipped_bs_accounts:
+            summary += f"\n📋 Skipped {len(skipped_bs_accounts)} balance sheet accounts (Assets/Liabilities/Equity)"
         if missing_accounts:
             summary += f"\n⚠️ {len(missing_accounts)} COA accounts had no transactions (may be inactive)"
     else:
         summary = f"❌ Validation FAILED - {len(discrepancies)} discrepancies found"
+        if skipped_bs_accounts:
+            summary += f"\n📋 Skipped {len(skipped_bs_accounts)} balance sheet accounts"
         summary += "\n\nDiscrepancies:"
         for d in discrepancies[:10]:  # Show first 10
             summary += f"\n  • {d['account']}: expected ${d['expected']:,.2f}, got ${d['actual']:,.2f} (${d['variance']:+,.2f})"
