@@ -287,11 +287,11 @@ st.markdown("""
 st.markdown('<p class="main-header">📊 P&L Variance Analyzer</p>', unsafe_allow_html=True)
 st.markdown('<p class="sub-header">Upload your QuickBooks exports • Identify cost anomalies • Get actionable insights</p>', unsafe_allow_html=True)
 
-# Dev mode bypass - add ?dev=true to URL to skip auth
+# Dev mode bypass - add ?dev=SECRET_KEY to URL to skip auth
 params = st.query_params
-DEV_MODE = params.get("dev") == "true"
+DEV_MODE = params.get("dev") == st.secrets.get("dev_key", "")
 
-if DEV_MODE:
+if DEV_MODE and st.secrets.get("dev_key"):
     st.warning("🔧 DEV MODE - Auth & paywall bypassed")
     user = {"id": "dev", "email": "dev@test.com", "is_pro": True, "analyses_used": 0}
     st.session_state.user = user

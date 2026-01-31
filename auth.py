@@ -210,10 +210,6 @@ def render_auth_ui():
         st.markdown("### ✉️ Check your email")
         st.markdown(f"We sent a verification code to **{email}**")
         
-        # For demo/development - show the code (remove in production!)
-        if "verification_code" in st.session_state:
-            st.info(f"🔧 Dev mode - Code: **{st.session_state.verification_code}**")
-        
         col1, col2 = st.columns([3, 1])
         with col1:
             code_input = st.text_input("Enter 6-digit code", placeholder="123456", max_chars=6, label_visibility="collapsed")
