@@ -62,6 +62,36 @@ def detect_date_format(df, date_col=1) -> bool:
     return False  # Default to MM/DD/YYYY
 
 
+def find_gl_sheet(file_path: str) -> str:
+    """Find the sheet containing General Ledger data"""
+    xl = pd.ExcelFile(file_path)
+    
+    # Priority order for GL sheet names
+    gl_keywords = ['general ledger', 'gl', 'ytd gl', 'historic gl', 'ledger']
+    
+    # First, try exact/partial matches
+    for sheet in xl.sheet_names:
+        sheet_lower = sheet.lower()
+        for keyword in gl_keywords:
+            if keyword in sheet_lower:
+                return sheet
+    
+    # If no match found, check each sheet for GL-like structure
+    for sheet in xl.sheet_names:
+        try:
+            df = pd.read_excel(file_path, sheet_name=sheet, header=None, nrows=20)
+            # Look for GL-like headers (Date, Transaction Type, Amount)
+            for i, row in df.iterrows():
+                row_str = ' '.join([str(v).lower() for v in row.values if pd.notna(v)])
+                if 'date' in row_str and ('transaction' in row_str or 'amount' in row_str):
+                    return sheet
+        except:
+            pass
+    
+    # Default to first sheet
+    return xl.sheet_names[0]
+
+
 def parse_gl_with_mapping(gl_file: str, account_map: Dict[str, AccountType], date_format: str = "auto") -> Tuple[Dict[str, AccountSummary], List[Transaction]]:
     """
     Parse GL using CoA mapping for accurate classification
@@ -71,7 +101,10 @@ def parse_gl_with_mapping(gl_file: str, account_map: Dict[str, AccountType], dat
     "Total for" lines. This avoids double-counting when transactions post
     to both parent and child accounts.
     """
-    df = pd.read_excel(gl_file, sheet_name=0, header=None)
+    # Find the correct sheet
+    sheet_name = find_gl_sheet(gl_file)
+    
+    df = pd.read_excel(gl_file, sheet_name=sheet_name, header=None)
     
     # Determine date format
     if date_format == "dmy":

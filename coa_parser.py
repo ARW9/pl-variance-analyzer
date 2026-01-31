@@ -100,14 +100,47 @@ QBO_TYPE_MAP = {
 }
 
 
+def find_coa_sheet(file_path: str) -> str:
+    """Find the sheet containing Chart of Accounts data"""
+    xl = pd.ExcelFile(file_path)
+    
+    # Priority order for COA sheet names
+    coa_keywords = ['account list', 'chart of accounts', 'coa', 'accounts']
+    
+    # First, try exact/partial matches
+    for sheet in xl.sheet_names:
+        sheet_lower = sheet.lower()
+        for keyword in coa_keywords:
+            if keyword in sheet_lower:
+                return sheet
+    
+    # If no match found, check each sheet for COA-like structure
+    for sheet in xl.sheet_names:
+        try:
+            df = pd.read_excel(file_path, sheet_name=sheet, header=None, nrows=15)
+            # Look for "type" column which indicates COA
+            for i, row in df.iterrows():
+                row_str = ' '.join([str(v).lower() for v in row.values if pd.notna(v)])
+                if 'type' in row_str and ('account' in row_str or 'name' in row_str):
+                    return sheet
+        except:
+            pass
+    
+    # Default to first sheet
+    return xl.sheet_names[0]
+
+
 def parse_qbo_coa(file_path: str) -> Dict[str, AccountType]:
     """
     Parse QBO Chart of Accounts export
     
     Handles various QBO export formats with flexible column detection
     """
+    # Find the correct sheet
+    sheet_name = find_coa_sheet(file_path)
+    
     # First, find the header row
-    df_raw = pd.read_excel(file_path, sheet_name=0, header=None)
+    df_raw = pd.read_excel(file_path, sheet_name=sheet_name, header=None)
     
     header_row = 0
     for i in range(min(15, len(df_raw))):
@@ -125,7 +158,7 @@ def parse_qbo_coa(file_path: str) -> Dict[str, AccountType]:
             break
     
     # Re-read with correct header
-    df = pd.read_excel(file_path, sheet_name=0, header=header_row)
+    df = pd.read_excel(file_path, sheet_name=sheet_name, header=header_row)
     
     # Normalize column names
     df.columns = [str(c).strip().lower() for c in df.columns]
