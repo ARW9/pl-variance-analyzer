@@ -1883,8 +1883,9 @@ How much of every dollar earned goes to operating expenses.
 ---
 
 **Fixed Costs**  
-Expenses that stay roughly the same each month (rent, insurance, salaries).  
-*Why it matters:* High fixed costs = less flexibility. If revenue drops, these costs don't.
+The sum of all expenses in the **✓ Consistent** tab — items with low month-to-month variance (CV < 15%).  
+*Why it matters:* High fixed costs = less flexibility. If revenue drops, these costs don't.  
+*Note:* This total matches the Consistent tab. Variable Costs = everything else (Volatile + Anomalies).
 
 ---
 
