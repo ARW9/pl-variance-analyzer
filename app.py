@@ -453,7 +453,7 @@ st.markdown("""
 
 # Header
 st.markdown('<p class="main-header">📊 P&L Variance Analyzer</p>', unsafe_allow_html=True)
-st.markdown('<p class="sub-header">Upload your QuickBooks exports • Identify cost anomalies • Get actionable insights</p>', unsafe_allow_html=True)
+st.markdown('<p class="sub-header">Upload your QuickBooks Online exports • Identify cost anomalies • Get actionable insights</p>', unsafe_allow_html=True)
 
 # Dev mode bypass - add ?dev=SECRET_KEY to URL to skip auth
 params = st.query_params
@@ -571,20 +571,17 @@ with st.sidebar:
             )
             
             st.markdown("---")
-            st.markdown("**📋 Export Requirements:**")
+            st.markdown("**📋 Requirements:**")
             st.markdown("""
-            - **File type:** Excel (.xlsx) only
-            - **Chart of Accounts:** Must include columns for account **Name** and **Type**
-            - **General Ledger:** Must include **Date**, **Amount**, and account names
-            - **Date range:** Export the full period you want to analyze
+            - **QuickBooks Online only** (not Desktop)
+            - Export directly from QBO → Excel (.xlsx)
+            - Don't modify files before uploading
+            - One report per file (single sheet)
             """)
             
-            st.markdown("**💡 Tips for best results:**")
+            st.markdown("**💡 If months look wrong:**")
             st.markdown("""
-            - Export directly from QBO (not via third-party tools)
-            - Don't modify the Excel files before uploading
-            - Use "Run Report" then "Export to Excel" in QBO
-            - If comparison looks wrong, try changing Date Format above
+            Change **Date Format** above to match your region
             """)
         
         # Check if user can still analyze
@@ -637,6 +634,11 @@ def validate_coa_file(file_path: str) -> tuple[bool, str, dict]:
     Returns (is_valid, message, info_dict)
     """
     try:
+        # Check for single sheet
+        xl = pd.ExcelFile(file_path)
+        if len(xl.sheet_names) > 1:
+            return False, f"File has multiple sheets ({len(xl.sheet_names)}). Please upload the raw QBO export with a single sheet.", {}
+        
         df = pd.read_excel(file_path, sheet_name=0, header=None)
         
         if len(df) < 2:
@@ -672,6 +674,11 @@ def validate_gl_file(file_path: str) -> tuple[bool, str, dict]:
     Returns (is_valid, message, info_dict)
     """
     try:
+        # Check for single sheet
+        xl = pd.ExcelFile(file_path)
+        if len(xl.sheet_names) > 1:
+            return False, f"File has multiple sheets ({len(xl.sheet_names)}). Please upload the raw QBO export with a single sheet.", {}
+        
         df = pd.read_excel(file_path, sheet_name=0, header=None)
         
         if len(df) < 5:
@@ -1769,8 +1776,10 @@ Your files are temporarily written to the server during analysis, then deleted w
 
 **What file formats are supported?**
 
-• Excel files (.xlsx) exported from QuickBooks Online
+• **QuickBooks Online only** (not QuickBooks Desktop)
+• Excel files (.xlsx) exported directly from QBO
 • Chart of Accounts and General Ledger reports
+• Raw exports only — don't modify the files before uploading
 
 ---
 
