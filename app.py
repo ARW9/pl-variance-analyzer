@@ -1959,7 +1959,7 @@ Expenses that are predictable and stable.
 
 
 # Main content - Show landing page if no analysis yet
-if 'analysis' not in st.session_state:
+if 'pl_statement' not in st.session_state and 'analysis' not in st.session_state:
     
     # Demo Preview Section
     st.header("📈 See What You'll Get")
@@ -1977,27 +1977,27 @@ if 'analysis' not in st.session_state:
         exp_col1, exp_col2 = st.columns(2)
         with exp_col1:
             st.markdown("""
-            **📋 Export Chart of Accounts**
-            1. Log into QuickBooks Online
-            2. Click the **Settings** gear icon (top right)
-            3. Select **Chart of Accounts**
-            4. Click **Run Report** button (top right)
-            5. Click **Export** dropdown → **Export to Excel**
-            6. Save the .xlsx file to your computer
+            **📊 Export Profit & Loss by Month (Required)**
+            1. Go to **Reports** in the left menu
+            2. Search for **"Profit and Loss"**
+            3. Click **Customize**
+            4. Under **Display**, select **Months** for columns
+            5. Set your **date range** (e.g., Full Year)
+            6. Click **Run Report**
+            7. Click **Export** → **Export to CSV**
             
-            *⏱️ This only needs to be done once per company*
+            *💡 This is your source of truth for financials*
             """)
         with exp_col2:
             st.markdown("""
-            **📊 Export General Ledger**
+            **📋 Export General Ledger (Optional)**
             1. Go to **Reports** in the left menu
             2. Search for **"General Ledger"**
-            3. Set your **date range** (e.g., This Fiscal Year)
+            3. Set your **date range** (same as P&L)
             4. Click **Run Report**
-            5. Click **Export** dropdown → **Export to Excel**
-            6. Save the .xlsx file to your computer
+            5. Click **Export** → **Export to CSV**
             
-            *💡 Export for any period you want to analyze*
+            *⏱️ Optional: Use for transaction drill-down*
             """)
     
     # FAQ Section (collapsed by default)
