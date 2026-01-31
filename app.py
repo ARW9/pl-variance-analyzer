@@ -2110,10 +2110,10 @@ if analyze_btn and pl_file and user:
             monthly = summary.get('monthly', {})
             
             # Build expense categories from P&L line items with variance analysis
-            import numpy as np
+            import statistics
             
             # Keywords that indicate expenses should be consistent month-to-month
-            CONSISTENT_KEYWORDS = ['rent', 'lease', 'insurance', 'salary', 'subscription', 'license', 'permit', 'depreciation']
+            CONSISTENT_KEYWORDS = ['rent', 'lease', 'insurance', 'salary', 'subscription', 'license', 'permit', 'depreciation', 'interest', 'phone', 'internet']
             
             expense_items = [item for item in statement.line_items 
                            if item.section == PLSection.EXPENSES and not item.is_total_row and item.total != 0]
@@ -2125,14 +2125,14 @@ if analyze_btn and pl_file and user:
             for item in sorted(expense_items, key=lambda x: abs(x.total), reverse=True):
                 # Get monthly values (excluding Total column)
                 monthly_vals = [item.monthly_values.get(m, 0) for m in statement.months if m.lower() != 'total']
-                # Filter out zero months for analysis (account may not exist all year)
-                non_zero_vals = [v for v in monthly_vals if v != 0]
+                # Filter out zero months for variance analysis (use non-zero values only, like original)
+                non_zero_vals = [abs(v) for v in monthly_vals if v != 0]
                 
-                # Calculate statistics
+                # Calculate statistics using same approach as expense_analyzer
                 if len(non_zero_vals) >= 2:
-                    monthly_avg = np.mean(non_zero_vals)
-                    monthly_std = np.std(non_zero_vals)
-                    cv = (monthly_std / abs(monthly_avg)) if monthly_avg != 0 else 0
+                    monthly_avg = statistics.mean(non_zero_vals)
+                    monthly_std = statistics.stdev(non_zero_vals) if len(non_zero_vals) > 1 else 0
+                    cv = (monthly_std / monthly_avg) if monthly_avg > 0 else 0
                 else:
                     monthly_avg = non_zero_vals[0] if non_zero_vals else 0
                     monthly_std = 0
@@ -2143,8 +2143,9 @@ if analyze_btn and pl_file and user:
                 consistency_expected = any(kw in name_lower for kw in CONSISTENT_KEYWORDS)
                 
                 # Flag anomalies: expected to be consistent but has high variance
-                is_consistent = cv < 0.15  # Less than 15% variance
-                has_anomaly = consistency_expected and not is_consistent and cv > 0.30
+                # Use same thresholds as expense_analyzer: CV_CONSISTENT=0.15, CV_VOLATILE=0.50
+                is_consistent = cv < CV_CONSISTENT_THRESHOLD  # <15% variance = consistent
+                has_anomaly = consistency_expected and not is_consistent and cv > CV_CONSISTENT_THRESHOLD
                 
                 cat = ExpenseCategory(
                     name=item.name,
@@ -2163,11 +2164,14 @@ if analyze_btn and pl_file and user:
                 )
                 categories.append(cat)
                 
-                # Generate insights for anomalies
+                # Generate insights for anomalies and volatile items
                 if has_anomaly:
-                    insights.append(f"⚠️ **{item.name}** shows unexpected variance ({cv:.0%}) - typically this should be consistent")
-                elif cv > 0.50 and item.total > totals['expenses'] * 0.05:
-                    insights.append(f"📊 **{item.name}** is highly variable ({cv:.0%} variance) - review for optimization opportunities")
+                    insights.append(f"⚠️ **{item.name}** shows unexpected variance ({cv:.0%}) - this expense should typically be consistent month-to-month")
+                
+                # Flag highly volatile expenses (CV > 50%) that are significant (>2% of expenses)
+                if cv > CV_VOLATILE_THRESHOLD and item.total > totals['expenses'] * 0.02:
+                    if not has_anomaly:  # Don't double-report
+                        insights.append(f"📊 **{item.name}** is highly variable ({cv:.0%} CV) - consider reviewing for patterns")
             
             # Add general insights
             if totals['expenses'] / totals['revenue'] > 0.40:
