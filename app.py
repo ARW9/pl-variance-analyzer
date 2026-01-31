@@ -1274,6 +1274,24 @@ def render_analysis(analysis, is_demo=False, pnl_data=None, transactions=None, a
     if transactions and not is_demo:
         st.header("📅 Period Selection")
         
+        # Debug: Show sample transaction dates
+        with st.expander("🔧 Debug: Transaction Data", expanded=False):
+            st.write(f"**Total transactions:** {len(transactions)}")
+            if transactions:
+                sample_dates = [t.date for t in transactions[:10]]
+                st.write(f"**Sample dates (first 10):** {sample_dates}")
+                # Show date format distribution
+                date_formats = {"YYYY-MM-DD": 0, "MM/DD/YYYY": 0, "other": 0}
+                for t in transactions[:100]:
+                    d = str(t.date)
+                    if len(d) >= 10 and d[4] == '-':
+                        date_formats["YYYY-MM-DD"] += 1
+                    elif '/' in d:
+                        date_formats["MM/DD/YYYY"] += 1
+                    else:
+                        date_formats["other"] += 1
+                st.write(f"**Date format distribution (first 100):** {date_formats}")
+        
         months = extract_months_from_transactions(transactions)
         
         if months:
@@ -1314,6 +1332,9 @@ def render_analysis(analysis, is_demo=False, pnl_data=None, transactions=None, a
                 # Filter transactions and build P&Ls
                 txns_prior = filter_transactions_by_month(transactions, prior_month)
                 txns_current = filter_transactions_by_month(transactions, current_month)
+                
+                # Debug: show transaction counts
+                st.info(f"🔧 Debug: Prior ({prior_month}): {len(txns_prior)} txns | Current ({current_month}): {len(txns_current)} txns | Total: {len(transactions)}")
                 
                 pnl_prior = build_pnl_from_transactions(txns_prior, account_map)
                 pnl_current = build_pnl_from_transactions(txns_current, account_map)
