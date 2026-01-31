@@ -1354,95 +1354,9 @@ def render_analysis(analysis, is_demo=False, pnl_data=None, transactions=None, a
     st.divider()
     
     # Tabs
-    tab1, tab2, tab3, tab4, tab5 = st.tabs(["🚨 Anomalies", "📊 Volatile", "✓ Consistent", "🏢 Vendors", "📖 How to Use This Data"])
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(["📖 How to Use This Data", "🚨 Anomalies", "📊 Volatile", "✓ Consistent", "🏢 Vendors"])
     
     with tab1:
-        anomalies = [c for c in analysis.categories if c.has_anomaly]
-        if anomalies:
-            st.error(f"Found {len(anomalies)} expense categories that should be consistent but aren't")
-            for cat in anomalies:
-                st.markdown(f"""
-                <div class="anomaly-card">
-                    <h4>⚠️ {cat.name}</h4>
-                    <p><strong>Total:</strong> {format_currency(cat.total)} &nbsp;|&nbsp; <strong>Monthly Avg:</strong> {format_currency(cat.monthly_avg)}</p>
-                    <p><strong>Variance:</strong> {cat.coefficient_of_variation:.0%} <span style="color: #fca5a5;">(should be &lt;15%)</span></p>
-                    <p><strong>Range:</strong> {format_currency(max(0, cat.monthly_avg - cat.monthly_std))} - {format_currency(cat.monthly_avg + cat.monthly_std)}</p>
-                </div>
-                """, unsafe_allow_html=True)
-                if cat.monthly_trend:
-                    df = pd.DataFrame([{"Month": k, "Amount": v} for k, v in sorted(cat.monthly_trend.items())])
-                    st.line_chart(df.set_index("Month"), color="#dc2626")
-                if cat.top_vendors and cat.top_vendors[0][0] != "Unknown":
-                    st.caption(f"🏢 Top Vendor: {cat.top_vendors[0][0]}")
-                st.markdown("---")
-        else:
-            st.success("✓ No anomalies detected!")
-    
-    with tab2:
-        volatile = [c for c in analysis.categories if not c.is_consistent and not c.has_anomaly and c.coefficient_of_variation > CV_VOLATILE_THRESHOLD]
-        if volatile:
-            st.warning(f"Found {len(volatile)} volatile expense categories worth reviewing")
-            for cat in volatile[:10]:
-                with st.expander(f"📊 {cat.name} — {format_currency(cat.total)} ({cat.coefficient_of_variation:.0%} variance)"):
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        st.write(f"**% of Revenue:** {cat.pct_of_revenue:.1f}%")
-                        st.write(f"**Transactions:** {cat.transaction_count}")
-                        st.write(f"**Avg Transaction:** {format_currency(cat.avg_transaction)}")
-                    with col2:
-                        if cat.top_vendors:
-                            st.write("**Top Vendors:**")
-                            for vendor, amount in cat.top_vendors[:3]:
-                                if vendor != "Unknown":
-                                    st.write(f"- {vendor}: {format_currency(amount)}")
-                    if cat.monthly_trend:
-                        df = pd.DataFrame([{"Month": k, "Amount": v} for k, v in sorted(cat.monthly_trend.items())])
-                        st.line_chart(df.set_index("Month"), color="#f59e0b")
-        else:
-            st.success("✓ No highly volatile expenses found.")
-    
-    with tab3:
-        consistent = [c for c in analysis.categories if c.is_consistent and not c.has_anomaly]
-        if consistent:
-            consistent_total = sum(c.total for c in consistent)
-            st.success(f"✓ {len(consistent)} categories are stable ({format_currency(consistent_total)} total)")
-            df = pd.DataFrame([{"Category": c.name, "Total": c.total, "CV": f"{c.coefficient_of_variation:.0%}", "Status": "✓ Stable" if c.coefficient_of_variation < 0.10 else "~ Mostly Stable"} for c in sorted(consistent, key=lambda x: -x.total)])
-            st.dataframe(df, column_config={"Total": st.column_config.NumberColumn(format="$%.2f")}, hide_index=True, use_container_width=True)
-        else:
-            st.info("No consistently stable expenses identified.")
-    
-    with tab4:
-        st.subheader("Top Vendors by Spend")
-        vendors_data = [{"Vendor": v.name, "Total Spend": v.total_spend, "Transactions": v.transaction_count, "Avg Transaction": v.avg_transaction, "Recurring": "🔄 Yes" if v.is_recurring else "No"} for v in analysis.top_vendors[:20] if v.name != "Unknown"]
-        if vendors_data:
-            df = pd.DataFrame(vendors_data)
-            st.dataframe(df, column_config={"Total Spend": st.column_config.NumberColumn(format="$%.2f"), "Avg Transaction": st.column_config.NumberColumn(format="$%.2f")}, hide_index=True, use_container_width=True)
-        if analysis.unknown_vendors_total > 0:
-            st.error(f"⚠️ {format_currency(analysis.unknown_vendors_total)} in expenses have no vendor identified ({analysis.unknown_vendors_count} transactions)")
-            
-            # Show unknown vendor transactions if we have transaction data
-            if transactions:
-                unknown_txns = [t for t in transactions if not t.vendor or t.vendor.strip() == "" or t.vendor.strip().lower() == "unknown"]
-                if unknown_txns:
-                    with st.expander(f"📋 View {len(unknown_txns)} Unidentified Transactions", expanded=False):
-                        st.caption("These transactions have no vendor name — consider updating them in QuickBooks for better tracking.")
-                        unknown_data = [{
-                            "Date": t.date,
-                            "Account": t.account,
-                            "Description": t.description[:50] + "..." if len(t.description) > 50 else t.description,
-                            "Amount": t.amount
-                        } for t in sorted(unknown_txns, key=lambda x: -abs(x.amount))[:100]]  # Top 100 by amount
-                        df = pd.DataFrame(unknown_data)
-                        st.dataframe(
-                            df, 
-                            column_config={"Amount": st.column_config.NumberColumn(format="$%.2f")}, 
-                            hide_index=True, 
-                            use_container_width=True
-                        )
-                        if len(unknown_txns) > 100:
-                            st.caption(f"Showing top 100 of {len(unknown_txns)} transactions by amount")
-    
-    with tab5:
         st.subheader("Understanding Your Numbers")
         st.markdown("""
 **What Each Metric Means:**
@@ -1491,6 +1405,92 @@ Expenses that naturally vary month-to-month.
 Expenses that are predictable and stable.  
 *What it means:* These are your "set and forget" costs — good for budgeting.
         """)
+    
+    with tab2:
+        anomalies = [c for c in analysis.categories if c.has_anomaly]
+        if anomalies:
+            st.error(f"Found {len(anomalies)} expense categories that should be consistent but aren't")
+            for cat in anomalies:
+                st.markdown(f"""
+                <div class="anomaly-card">
+                    <h4>⚠️ {cat.name}</h4>
+                    <p><strong>Total:</strong> {format_currency(cat.total)} &nbsp;|&nbsp; <strong>Monthly Avg:</strong> {format_currency(cat.monthly_avg)}</p>
+                    <p><strong>Variance:</strong> {cat.coefficient_of_variation:.0%} <span style="color: #fca5a5;">(should be &lt;15%)</span></p>
+                    <p><strong>Range:</strong> {format_currency(max(0, cat.monthly_avg - cat.monthly_std))} - {format_currency(cat.monthly_avg + cat.monthly_std)}</p>
+                </div>
+                """, unsafe_allow_html=True)
+                if cat.monthly_trend:
+                    df = pd.DataFrame([{"Month": k, "Amount": v} for k, v in sorted(cat.monthly_trend.items())])
+                    st.line_chart(df.set_index("Month"), color="#dc2626")
+                if cat.top_vendors and cat.top_vendors[0][0] != "Unknown":
+                    st.caption(f"🏢 Top Vendor: {cat.top_vendors[0][0]}")
+                st.markdown("---")
+        else:
+            st.success("✓ No anomalies detected!")
+    
+    with tab3:
+        volatile = [c for c in analysis.categories if not c.is_consistent and not c.has_anomaly and c.coefficient_of_variation > CV_VOLATILE_THRESHOLD]
+        if volatile:
+            st.warning(f"Found {len(volatile)} volatile expense categories worth reviewing")
+            for cat in volatile[:10]:
+                with st.expander(f"📊 {cat.name} — {format_currency(cat.total)} ({cat.coefficient_of_variation:.0%} variance)"):
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.write(f"**% of Revenue:** {cat.pct_of_revenue:.1f}%")
+                        st.write(f"**Transactions:** {cat.transaction_count}")
+                        st.write(f"**Avg Transaction:** {format_currency(cat.avg_transaction)}")
+                    with col2:
+                        if cat.top_vendors:
+                            st.write("**Top Vendors:**")
+                            for vendor, amount in cat.top_vendors[:3]:
+                                if vendor != "Unknown":
+                                    st.write(f"- {vendor}: {format_currency(amount)}")
+                    if cat.monthly_trend:
+                        df = pd.DataFrame([{"Month": k, "Amount": v} for k, v in sorted(cat.monthly_trend.items())])
+                        st.line_chart(df.set_index("Month"), color="#f59e0b")
+        else:
+            st.success("✓ No highly volatile expenses found.")
+    
+    with tab4:
+        consistent = [c for c in analysis.categories if c.is_consistent and not c.has_anomaly]
+        if consistent:
+            consistent_total = sum(c.total for c in consistent)
+            st.success(f"✓ {len(consistent)} categories are stable ({format_currency(consistent_total)} total)")
+            df = pd.DataFrame([{"Category": c.name, "Total": c.total, "CV": f"{c.coefficient_of_variation:.0%}", "Status": "✓ Stable" if c.coefficient_of_variation < 0.10 else "~ Mostly Stable"} for c in sorted(consistent, key=lambda x: -x.total)])
+            st.dataframe(df, column_config={"Total": st.column_config.NumberColumn(format="$%.2f")}, hide_index=True, use_container_width=True)
+        else:
+            st.info("No consistently stable expenses identified.")
+    
+    with tab5:
+        st.subheader("Top Vendors by Spend")
+        vendors_data = [{"Vendor": v.name, "Total Spend": v.total_spend, "Transactions": v.transaction_count, "Avg Transaction": v.avg_transaction, "Recurring": "🔄 Yes" if v.is_recurring else "No"} for v in analysis.top_vendors[:20] if v.name != "Unknown"]
+        if vendors_data:
+            df = pd.DataFrame(vendors_data)
+            st.dataframe(df, column_config={"Total Spend": st.column_config.NumberColumn(format="$%.2f"), "Avg Transaction": st.column_config.NumberColumn(format="$%.2f")}, hide_index=True, use_container_width=True)
+        if analysis.unknown_vendors_total > 0:
+            st.error(f"⚠️ {format_currency(analysis.unknown_vendors_total)} in expenses have no vendor identified ({analysis.unknown_vendors_count} transactions)")
+            
+            # Show unknown vendor transactions if we have transaction data
+            if transactions:
+                unknown_txns = [t for t in transactions if not t.vendor or t.vendor.strip() == "" or t.vendor.strip().lower() == "unknown"]
+                if unknown_txns:
+                    with st.expander(f"📋 View {len(unknown_txns)} Unidentified Transactions", expanded=False):
+                        st.caption("These transactions have no vendor name — consider updating them in QuickBooks for better tracking.")
+                        unknown_data = [{
+                            "Date": t.date,
+                            "Account": t.account,
+                            "Description": t.description[:50] + "..." if len(t.description) > 50 else t.description,
+                            "Amount": t.amount
+                        } for t in sorted(unknown_txns, key=lambda x: -abs(x.amount))[:100]]  # Top 100 by amount
+                        df = pd.DataFrame(unknown_data)
+                        st.dataframe(
+                            df, 
+                            column_config={"Amount": st.column_config.NumberColumn(format="$%.2f")}, 
+                            hide_index=True, 
+                            use_container_width=True
+                        )
+                        if len(unknown_txns) > 100:
+                            st.caption(f"Showing top 100 of {len(unknown_txns)} transactions by amount")
     
     # Monthly trend
     st.divider()
