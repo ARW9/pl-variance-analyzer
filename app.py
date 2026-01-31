@@ -1973,7 +1973,7 @@ We do NOT collect, store, or have access to your financial data, account names, 
 
 **Can I delete my account and data?**
 
-Yes. Email privacy@aquifercfo.com to request complete deletion of your account and all associated data. We will process deletion requests within 48 hours.
+Yes. Email alex@williamson.nu to request complete deletion of your account and all associated data. We will process deletion requests within 48 hours.
 
 ---
 
@@ -2088,7 +2088,7 @@ We do NOT use your data for advertising, marketing, or sale to third parties.
 **6. Your Rights**
 
 You have the right to:
-• **Access** your data (email privacy@aquifercfo.com)
+• **Access** your data (email alex@williamson.nu)
 • **Delete** your account and data (48-hour processing)
 • **Export** your account data
 • **Opt out** of non-essential communications
@@ -2098,7 +2098,7 @@ You have the right to:
 **7. Contact**
 
 For privacy questions or deletion requests:
-📧 privacy@aquifercfo.com
+📧 alex@williamson.nu
 
 ---
 
@@ -2175,7 +2175,7 @@ You agree to:
 
 **8. Contact**
 
-📧 support@aquifercfo.com
+📧 alex@williamson.nu
         """)
     
     st.divider()
@@ -2509,7 +2509,7 @@ if user:
                         st.success("Account deleted. Goodbye!")
                         st.rerun()
                     except Exception as e:
-                        st.error(f"Error deleting account. Please email privacy@aquifercfo.com")
+                        st.error(f"Error deleting account. Please email alex@williamson.nu")
             with col2:
                 if st.button("Cancel", use_container_width=True):
                     st.session_state['confirm_delete'] = False
