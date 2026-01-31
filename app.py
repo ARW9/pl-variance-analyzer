@@ -781,51 +781,149 @@ def render_pnl_comparison(pnl_current: dict, pnl_prior: dict, label_current: str
     df = pd.DataFrame(rows)
     st.dataframe(df, hide_index=True, use_container_width=True, height=600)
     
-    # Variance Commentary
-    st.subheader("📝 Key Variance Analysis")
+    # KPIs Comparison Section
+    st.subheader("📊 Key Performance Indicators")
     
-    commentary = []
+    kpi_col1, kpi_col2, kpi_col3, kpi_col4 = st.columns(4)
     
-    # Revenue commentary
-    if totals_prior["total_revenue"] > 0:
-        rev_change = totals_current["total_revenue"] - totals_prior["total_revenue"]
-        rev_pct_val = (rev_change / totals_prior["total_revenue"]) * 100
-        if abs(rev_pct_val) > 5:
-            direction = "increased" if rev_change > 0 else "decreased"
-            commentary.append(f"**Revenue** {direction} by {format_currency(abs(rev_change))} ({abs(rev_pct_val):.1f}%)")
+    # Gross Margin comparison
+    with kpi_col1:
+        gm_change = totals_current["gross_margin"] - totals_prior["gross_margin"]
+        st.metric("Gross Margin", f"{totals_current['gross_margin']:.1f}%", f"{gm_change:+.1f}pp")
+        st.caption(f"Prior: {totals_prior['gross_margin']:.1f}%")
     
-    # Find top expense variances
-    expense_variances = []
+    # Net Margin comparison
+    with kpi_col2:
+        nm_change = totals_current["net_margin"] - totals_prior["net_margin"]
+        st.metric("Net Margin", f"{totals_current['net_margin']:.1f}%", f"{nm_change:+.1f}pp")
+        st.caption(f"Prior: {totals_prior['net_margin']:.1f}%")
+    
+    # OpEx Ratio comparison
+    with kpi_col3:
+        opex_curr = (totals_current["total_expenses"] / totals_current["total_revenue"] * 100) if totals_current["total_revenue"] else 0
+        opex_prior = (totals_prior["total_expenses"] / totals_prior["total_revenue"] * 100) if totals_prior["total_revenue"] else 0
+        opex_change = opex_curr - opex_prior
+        st.metric("OpEx Ratio", f"{opex_curr:.1f}%", f"{opex_change:+.1f}pp", delta_color="inverse")
+        st.caption(f"Prior: {opex_prior:.1f}%")
+    
+    # COGS Ratio comparison
+    with kpi_col4:
+        cogs_curr = (totals_current["total_cogs"] / totals_current["total_revenue"] * 100) if totals_current["total_revenue"] else 0
+        cogs_prior = (totals_prior["total_cogs"] / totals_prior["total_revenue"] * 100) if totals_prior["total_revenue"] else 0
+        cogs_change = cogs_curr - cogs_prior
+        st.metric("COGS Ratio", f"{cogs_curr:.1f}%", f"{cogs_change:+.1f}pp", delta_color="inverse")
+        st.caption(f"Prior: {cogs_prior:.1f}%")
+    
+    st.divider()
+    
+    # Variance Commentary with detailed drivers
+    st.subheader("📝 Variance Analysis & Key Drivers")
+    
+    # Calculate all variances for detailed analysis
+    all_variances = []
+    
+    # Revenue variances
+    for acct in set(pnl_current.get("Revenue", {}).keys()) | set(pnl_prior.get("Revenue", {}).keys()):
+        curr = abs(pnl_current.get("Revenue", {}).get(acct, 0))
+        prior = abs(pnl_prior.get("Revenue", {}).get(acct, 0))
+        var_amt = curr - prior
+        var_pct = ((var_amt) / prior * 100) if prior > 0 else (100 if curr > 0 else 0)
+        if abs(var_amt) > 50:
+            all_variances.append(("Revenue", acct, prior, curr, var_amt, var_pct))
+    
+    # COGS variances
+    for acct in set(pnl_current.get("Cost of Goods Sold", {}).keys()) | set(pnl_prior.get("Cost of Goods Sold", {}).keys()):
+        curr = abs(pnl_current.get("Cost of Goods Sold", {}).get(acct, 0))
+        prior = abs(pnl_prior.get("Cost of Goods Sold", {}).get(acct, 0))
+        var_amt = curr - prior
+        var_pct = ((var_amt) / prior * 100) if prior > 0 else (100 if curr > 0 else 0)
+        if abs(var_amt) > 50:
+            all_variances.append(("COGS", acct, prior, curr, var_amt, var_pct))
+    
+    # Expense variances
     for acct in set(pnl_current.get("Expenses", {}).keys()) | set(pnl_prior.get("Expenses", {}).keys()):
         curr = abs(pnl_current.get("Expenses", {}).get(acct, 0))
         prior = abs(pnl_prior.get("Expenses", {}).get(acct, 0))
-        if prior > 0:
-            var_pct = ((curr - prior) / prior) * 100
-            if abs(var_pct) > 15 and abs(curr - prior) > 100:
-                expense_variances.append((acct, curr - prior, var_pct))
+        var_amt = curr - prior
+        var_pct = ((var_amt) / prior * 100) if prior > 0 else (100 if curr > 0 else 0)
+        if abs(var_amt) > 50:
+            all_variances.append(("Expense", acct, prior, curr, var_amt, var_pct))
     
-    # Sort by absolute variance
-    expense_variances.sort(key=lambda x: -abs(x[1]))
+    # Sort by absolute variance amount
+    all_variances.sort(key=lambda x: -abs(x[4]))
     
-    for acct, var_amt, var_pct in expense_variances[:5]:
-        direction = "increased" if var_amt > 0 else "decreased"
-        icon = "🔴" if var_amt > 0 else "🟢"
-        commentary.append(f"{icon} **{acct}** {direction} by {format_currency(abs(var_amt))} ({abs(var_pct):.1f}%)")
+    # Net Income change analysis
+    ni_change = totals_current["net_income"] - totals_prior["net_income"]
+    ni_change_pct = (ni_change / abs(totals_prior["net_income"]) * 100) if totals_prior["net_income"] != 0 else 0
     
-    # Net income commentary
-    if totals_prior["net_income"] != 0:
-        ni_change = totals_current["net_income"] - totals_prior["net_income"]
-        ni_pct_val = (ni_change / abs(totals_prior["net_income"])) * 100
-        if abs(ni_pct_val) > 5:
-            direction = "improved" if ni_change > 0 else "declined"
-            icon = "🟢" if ni_change > 0 else "🔴"
-            commentary.append(f"{icon} **Net Income** {direction} by {format_currency(abs(ni_change))} ({abs(ni_pct_val):.1f}%)")
-    
-    if commentary:
-        for item in commentary:
-            st.markdown(f"• {item}")
+    if ni_change > 0:
+        st.success(f"**Net Income improved by {format_currency(ni_change)} ({ni_change_pct:+.1f}%)**")
+    elif ni_change < 0:
+        st.error(f"**Net Income declined by {format_currency(abs(ni_change))} ({ni_change_pct:.1f}%)**")
     else:
-        st.info("No significant variances detected between periods.")
+        st.info("**Net Income unchanged between periods**")
+    
+    # Explain the drivers
+    st.markdown("**Key drivers of the change:**")
+    
+    favorable = []
+    unfavorable = []
+    
+    for cat, acct, prior, curr, var_amt, var_pct in all_variances[:10]:
+        if cat == "Revenue":
+            if var_amt > 0:
+                favorable.append((acct, var_amt, var_pct, "revenue increase"))
+            else:
+                unfavorable.append((acct, var_amt, var_pct, "revenue decrease"))
+        else:  # COGS or Expense
+            if var_amt < 0:  # Decrease in cost is favorable
+                favorable.append((acct, var_amt, var_pct, "cost reduction"))
+            else:
+                unfavorable.append((acct, var_amt, var_pct, "cost increase"))
+    
+    if favorable:
+        st.markdown("**🟢 Favorable variances:**")
+        for acct, var_amt, var_pct, reason in favorable[:5]:
+            st.markdown(f"• **{acct}**: {format_currency(abs(var_amt))} {reason} ({abs(var_pct):.1f}%)")
+    
+    if unfavorable:
+        st.markdown("**🔴 Unfavorable variances:**")
+        for acct, var_amt, var_pct, reason in unfavorable[:5]:
+            st.markdown(f"• **{acct}**: {format_currency(abs(var_amt))} {reason} ({abs(var_pct):.1f}%)")
+    
+    # Summary narrative
+    st.divider()
+    st.markdown("**📋 Executive Summary:**")
+    
+    summary_parts = []
+    
+    # Revenue narrative
+    rev_change = totals_current["total_revenue"] - totals_prior["total_revenue"]
+    if abs(rev_change) > 0:
+        rev_dir = "increased" if rev_change > 0 else "decreased"
+        rev_pct = (rev_change / totals_prior["total_revenue"] * 100) if totals_prior["total_revenue"] else 0
+        summary_parts.append(f"Revenue {rev_dir} by {format_currency(abs(rev_change))} ({abs(rev_pct):.1f}%)")
+    
+    # Gross margin narrative
+    if abs(gm_change) > 1:
+        gm_dir = "improved" if gm_change > 0 else "declined"
+        summary_parts.append(f"Gross margin {gm_dir} by {abs(gm_change):.1f} percentage points")
+    
+    # OpEx narrative
+    exp_change = totals_current["total_expenses"] - totals_prior["total_expenses"]
+    if abs(exp_change) > 0:
+        exp_dir = "increased" if exp_change > 0 else "decreased"
+        summary_parts.append(f"Operating expenses {exp_dir} by {format_currency(abs(exp_change))}")
+    
+    if summary_parts:
+        st.markdown(". ".join(summary_parts) + ".")
+    
+    # Top driver explanation
+    if all_variances:
+        top_driver = all_variances[0]
+        cat, acct, prior, curr, var_amt, var_pct = top_driver
+        direction = "increase" if var_amt > 0 else "decrease"
+        st.markdown(f"The largest single variance was **{acct}** ({cat}), which showed a {format_currency(abs(var_amt))} {direction} ({abs(var_pct):.1f}%) from {format_currency(prior)} to {format_currency(curr)}.")
     
     return totals_current, totals_prior
 
@@ -836,16 +934,41 @@ def render_pnl(pnl_data: dict, title: str = "📊 Profit & Loss Statement"):
     
     totals = calculate_pnl_totals(pnl_data)
     
-    # Summary metrics at top
+    # Summary metrics at top - Row 1
     col1, col2, col3, col4 = st.columns(4)
     with col1:
         st.metric("Revenue", format_currency(totals["total_revenue"]))
     with col2:
-        st.metric("Gross Profit", format_currency(totals["gross_profit"]), f"{totals['gross_margin']:.1f}%")
+        st.metric("Gross Profit", format_currency(totals["gross_profit"]))
+        st.caption(f"Gross Margin: {totals['gross_margin']:.1f}%")
     with col3:
         st.metric("Operating Expenses", format_currency(totals["total_expenses"]))
+        expense_ratio = (totals["total_expenses"] / totals["total_revenue"] * 100) if totals["total_revenue"] else 0
+        st.caption(f"OpEx Ratio: {expense_ratio:.1f}%")
     with col4:
-        st.metric("Net Income", format_currency(totals["net_income"]), f"{totals['net_margin']:.1f}%")
+        st.metric("Net Income", format_currency(totals["net_income"]))
+        st.caption(f"Net Margin: {totals['net_margin']:.1f}%")
+    
+    # Additional KPIs - Row 2
+    col5, col6, col7, col8 = st.columns(4)
+    with col5:
+        st.metric("COGS", format_currency(totals["total_cogs"]))
+        cogs_ratio = (totals["total_cogs"] / totals["total_revenue"] * 100) if totals["total_revenue"] else 0
+        st.caption(f"COGS Ratio: {cogs_ratio:.1f}%")
+    with col6:
+        operating_income = totals["gross_profit"] - totals["total_expenses"]
+        st.metric("Operating Income", format_currency(operating_income))
+        op_margin = (operating_income / totals["total_revenue"] * 100) if totals["total_revenue"] else 0
+        st.caption(f"Operating Margin: {op_margin:.1f}%")
+    with col7:
+        other_net = totals.get("total_other_income", 0) - totals.get("total_other_expense", 0)
+        st.metric("Other Income/Exp", format_currency(other_net))
+    with col8:
+        # Contribution margin (Revenue - COGS)
+        contrib_margin = totals["gross_profit"]
+        contrib_pct = (contrib_margin / totals["total_revenue"] * 100) if totals["total_revenue"] else 0
+        st.metric("Contribution Margin", format_currency(contrib_margin))
+        st.caption(f"Contribution %: {contrib_pct:.1f}%")
     
     st.divider()
     
@@ -1001,7 +1124,7 @@ def render_analysis(analysis, is_demo=False, pnl_data=None, transactions=None, a
                 """, unsafe_allow_html=True)
                 if cat.monthly_trend:
                     df = pd.DataFrame([{"Month": k, "Amount": v} for k, v in sorted(cat.monthly_trend.items())])
-                    st.bar_chart(df.set_index("Month"), color="#dc2626")
+                    st.line_chart(df.set_index("Month"), color="#dc2626")
                 if cat.top_vendors and cat.top_vendors[0][0] != "Unknown":
                     st.caption(f"🏢 Top Vendor: {cat.top_vendors[0][0]}")
                 st.markdown("---")
@@ -1027,7 +1150,7 @@ def render_analysis(analysis, is_demo=False, pnl_data=None, transactions=None, a
                                     st.write(f"- {vendor}: {format_currency(amount)}")
                     if cat.monthly_trend:
                         df = pd.DataFrame([{"Month": k, "Amount": v} for k, v in sorted(cat.monthly_trend.items())])
-                        st.bar_chart(df.set_index("Month"), color="#f59e0b")
+                        st.line_chart(df.set_index("Month"), color="#f59e0b")
         else:
             st.success("✓ No highly volatile expenses found.")
     
@@ -1065,7 +1188,7 @@ def render_analysis(analysis, is_demo=False, pnl_data=None, transactions=None, a
     st.header("📅 Monthly Expense Trend")
     if analysis.monthly_totals:
         df = pd.DataFrame([{"Month": k, "Total Expenses": v} for k, v in sorted(analysis.monthly_totals.items())])
-        st.bar_chart(df.set_index("Month"), color="#dc2626")
+        st.line_chart(df.set_index("Month"), color="#dc2626")
 
 
 # Main content - Show landing page if no analysis yet
