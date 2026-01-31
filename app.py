@@ -515,28 +515,17 @@ with st.sidebar:
         
         st.divider()
         
-        # Organized industry list
-        INDUSTRY_OPTIONS = [
-            "default",
-            # Retail & Consumer
-            "retail", "ecommerce", "restaurant", "hospitality", "grocery",
-            # Professional Services
-            "professional_services", "consulting", "legal", "accounting", "marketing_agency", "staffing",
-            # Healthcare
-            "healthcare", "dental", "medical_practice", "veterinary",
-            # Construction & Trades
-            "construction", "plumbing_hvac", "electrical", "landscaping",
-            # Manufacturing & Distribution
-            "manufacturing", "wholesale", "distribution",
-            # Technology
-            "technology", "saas", "it_services",
-            # Real Estate
-            "real_estate", "property_management",
-            # Transportation
-            "transportation", "trucking",
-            # Other Services
-            "fitness", "salon_spa", "childcare", "automotive_repair", "cleaning_services", "nonprofit",
-        ]
+        # Industry list (alphabetically sorted, default first)
+        INDUSTRY_OPTIONS = ["default"] + sorted([
+            "accounting", "automotive_repair", "childcare", "cleaning_services",
+            "construction", "consulting", "dental", "distribution", "ecommerce",
+            "electrical", "fitness", "grocery", "healthcare", "hospitality",
+            "it_services", "landscaping", "legal", "manufacturing", "marketing_agency",
+            "medical_practice", "nonprofit", "plumbing_hvac", "professional_services",
+            "property_management", "real_estate", "restaurant", "retail", "saas",
+            "salon_spa", "staffing", "technology", "transportation", "trucking",
+            "veterinary", "wholesale",
+        ])
         
         def format_industry(x):
             labels = {
@@ -1061,8 +1050,8 @@ def render_pnl_comparison(pnl_current: dict, pnl_prior: dict, label_current: str
         # Get all accounts from both periods
         all_accounts = set(current_data.keys()) | set(prior_data.keys())
         
-        # Sort by current amount (descending)
-        sorted_accounts = sorted(all_accounts, key=lambda x: -abs(current_data.get(x, 0)))
+        # Sort alphabetically
+        sorted_accounts = sorted(all_accounts, key=lambda x: x.lower())
         
         for acct in sorted_accounts:
             curr = abs(current_data.get(acct, 0))
@@ -1351,7 +1340,7 @@ def render_pnl(pnl_data: dict, title: str = "📊 Profit & Loss Statement"):
     
     # Revenue
     rows.append({"Account": "**REVENUE**", "Amount": ""})
-    for name, amt in sorted(pnl_data.get("Revenue", {}).items(), key=lambda x: -abs(x[1])):
+    for name, amt in sorted(pnl_data.get("Revenue", {}).items(), key=lambda x: x[0].lower()):
         rows.append({"Account": f"    {name}", "Amount": format_currency(abs(amt))})
     rows.append({"Account": "**Total Revenue**", "Amount": f"**{format_currency(totals['total_revenue'])}**"})
     rows.append({"Account": "", "Amount": ""})
@@ -1359,7 +1348,7 @@ def render_pnl(pnl_data: dict, title: str = "📊 Profit & Loss Statement"):
     # COGS
     if pnl_data.get("Cost of Goods Sold"):
         rows.append({"Account": "**COST OF GOODS SOLD**", "Amount": ""})
-        for name, amt in sorted(pnl_data.get("Cost of Goods Sold", {}).items(), key=lambda x: -abs(x[1])):
+        for name, amt in sorted(pnl_data.get("Cost of Goods Sold", {}).items(), key=lambda x: x[0].lower()):
             rows.append({"Account": f"    {name}", "Amount": format_currency(abs(amt))})
         rows.append({"Account": "**Total COGS**", "Amount": f"**{format_currency(totals['total_cogs'])}**"})
         rows.append({"Account": "", "Amount": ""})
@@ -1370,7 +1359,7 @@ def render_pnl(pnl_data: dict, title: str = "📊 Profit & Loss Statement"):
     
     # Expenses
     rows.append({"Account": "**OPERATING EXPENSES**", "Amount": ""})
-    for name, amt in sorted(pnl_data.get("Expenses", {}).items(), key=lambda x: -abs(x[1])):
+    for name, amt in sorted(pnl_data.get("Expenses", {}).items(), key=lambda x: x[0].lower()):
         rows.append({"Account": f"    {name}", "Amount": format_currency(abs(amt))})
     rows.append({"Account": "**Total Operating Expenses**", "Amount": f"**{format_currency(totals['total_expenses'])}**"})
     rows.append({"Account": "", "Amount": ""})
