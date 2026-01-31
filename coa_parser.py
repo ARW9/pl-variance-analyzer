@@ -140,9 +140,25 @@ def parse_qbo_coa(file_path: str) -> Dict[str, AccountType]:
         return None
     
     # Find the name, type, and number columns with multiple fallbacks
-    name_col = find_col(['full name', 'account name', 'name', 'account'])
+    # Order matters - more specific matches first
+    number_col = find_col(['account #', 'account number', 'acct #', 'number', 'no.'])
+    # For name, explicitly exclude the number column and prefer 'full name'
+    name_col = None
+    for candidate in ['full name', 'account name', 'name']:
+        for col in df.columns:
+            if candidate in col and col != number_col:
+                name_col = col
+                break
+        if name_col:
+            break
+    # Fallback to 'account' if nothing else found, but not if it's the number column
+    if not name_col:
+        for col in df.columns:
+            if 'account' in col and col != number_col and '#' not in col:
+                name_col = col
+                break
+    
     type_col = find_col(['account type', 'type'])
-    number_col = find_col(['number', 'account number', 'acct #', 'no.', 'account #'])
     
     # If we still can't find columns, try positional guessing
     if not name_col:
