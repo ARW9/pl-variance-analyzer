@@ -1940,17 +1940,57 @@ if 'analysis' not in st.session_state:
 
 **Are my documents saved somewhere when I upload them for analysis?**
 
-Your files are temporarily written to the server during analysis, then deleted when your session ends or the server restarts. We don't store your documents in any database or permanent storage. The servers are ephemeral (wiped regularly), and your data isn't retained after analysis.
+**No.** Your files are processed entirely in-memory and deleted immediately after analysis completes. We do not store your financial documents in any database, file system, or permanent storage. The analysis runs on ephemeral cloud infrastructure that is wiped regularly.
 
 ---
 
 **How safe is my data?**
 
-• Files exist only temporarily during your session
-• No permanent storage or database retention
-• Servers are ephemeral and wiped regularly
-• Read-only analysis — can't modify your QuickBooks
-• All connections encrypted via HTTPS
+• **Files are never stored** — processed in-memory only, deleted immediately after analysis
+• **No database storage of financial data** — we only store your email for authentication
+• **All connections encrypted** via HTTPS/TLS
+• **Read-only analysis** — we cannot access or modify your QuickBooks account
+• **Ephemeral infrastructure** — servers are stateless and wiped regularly
+• **Open source** — you can audit our code on GitHub (click "Fork" to view)
+
+---
+
+**Who can see my uploaded data?**
+
+Only you. Your financial data is processed in an isolated session and is not accessible to other users, our team, or any third parties. We do not have access to view, download, or retain your uploaded files.
+
+---
+
+**What personal information do you collect?**
+
+• **Email address** — for authentication and account management only
+• **Usage metrics** — number of analyses performed (for free tier limits)
+• **Payment info** — processed securely by Stripe (we never see your card details)
+
+We do NOT collect, store, or have access to your financial data, account names, vendor names, or any content from your uploaded files.
+
+---
+
+**Can I delete my account and data?**
+
+Yes. Email privacy@aquifercfo.com to request complete deletion of your account and all associated data. We will process deletion requests within 48 hours.
+
+---
+
+**What third-party services do you use?**
+
+• **Streamlit Cloud** — hosting (processes uploads in isolated containers)
+• **Supabase** — authentication database (stores email only)
+• **Stripe** — payment processing (PCI-DSS compliant)
+• **Resend** — transactional emails only
+
+None of these services have access to your financial data.
+
+---
+
+**Are you GDPR/CCPA compliant?**
+
+Yes. We minimize data collection, do not sell data, provide deletion rights, and process data only for the stated purpose (P&L analysis). See our Privacy Policy for details.
 
 ---
 
@@ -1971,7 +2011,171 @@ Yes! Month-to-month, no contracts. Cancel anytime via email or Stripe portal.
 
 **Where do the industry benchmarks come from?**
 
-Our industry benchmarks are compiled from multiple sources including IBISWorld industry reports, RMA Annual Statement Studies, BizMiner industry financial profiles, and aggregated public company financial data. The ranges represent typical operating expense ratios for small-to-medium businesses in each industry. These are general guidelines — your specific situation may vary based on business model, growth stage, and regional factors.
+Our industry benchmarks are compiled from IBISWorld industry reports, RMA Annual Statement Studies, BizMiner industry financial profiles, and aggregated public company financial data. These are general guidelines — your specific situation may vary.
+
+---
+
+**Can I self-host this?**
+
+Yes! This tool is open source. Click the "Fork" button to view the code on GitHub and deploy your own instance.
+        """)
+    
+    # Privacy Policy (collapsed by default)
+    with st.expander("🔒 Privacy Policy", expanded=False):
+        st.markdown("""
+**Privacy Policy — P&L Variance Analyzer**
+
+*Last updated: January 31, 2026*
+
+---
+
+**1. Information We Collect**
+
+**Information you provide:**
+• Email address (required for authentication)
+• Payment information (processed by Stripe — we never see card details)
+
+**Information we do NOT collect or store:**
+• Your uploaded financial files (processed in-memory, immediately deleted)
+• Account names, vendor names, or transaction details from your P&L
+• QuickBooks credentials or API access
+
+**Automatically collected:**
+• Usage metrics (number of analyses performed)
+• Basic analytics (page views, feature usage)
+
+---
+
+**2. How We Use Your Information**
+
+• **Email:** Authentication, account management, important service updates
+• **Usage metrics:** Enforce free tier limits, improve the product
+• **Payment info:** Process subscriptions via Stripe
+
+We do NOT use your data for advertising, marketing, or sale to third parties.
+
+---
+
+**3. Data Processing & Security**
+
+• All uploads are processed in isolated, ephemeral containers
+• Files exist only in memory during analysis (typically <30 seconds)
+• No financial data is written to disk or database
+• All connections encrypted via TLS 1.3
+• Infrastructure hosted on Streamlit Cloud (SOC 2 compliant)
+
+---
+
+**4. Third-Party Services**
+
+| Service | Purpose | Data Shared |
+|---------|---------|-------------|
+| Streamlit Cloud | Hosting | Session data (ephemeral) |
+| Supabase | Auth database | Email only |
+| Stripe | Payments | Payment info (PCI compliant) |
+| Resend | Email | Email address only |
+
+---
+
+**5. Data Retention**
+
+• **Financial files:** Not retained (deleted immediately after analysis)
+• **Email & account:** Retained until you request deletion
+• **Payment history:** Retained per legal requirements (typically 7 years)
+
+---
+
+**6. Your Rights**
+
+You have the right to:
+• **Access** your data (email privacy@aquifercfo.com)
+• **Delete** your account and data (48-hour processing)
+• **Export** your account data
+• **Opt out** of non-essential communications
+
+---
+
+**7. Contact**
+
+For privacy questions or deletion requests:
+📧 privacy@aquifercfo.com
+
+---
+
+**8. Changes**
+
+We may update this policy occasionally. Significant changes will be communicated via email.
+        """)
+    
+    # Terms of Service (collapsed by default)  
+    with st.expander("📜 Terms of Service", expanded=False):
+        st.markdown("""
+**Terms of Service — P&L Variance Analyzer**
+
+*Last updated: January 31, 2026*
+
+---
+
+**1. Service Description**
+
+P&L Variance Analyzer is a tool that analyzes Profit & Loss exports from QuickBooks Online to identify expense anomalies and variances. The analysis is for informational purposes only.
+
+---
+
+**2. Acceptable Use**
+
+You agree to:
+• Upload only files you have authorization to analyze
+• Not attempt to access other users' data or sessions
+• Not use the service for any illegal purpose
+• Not reverse engineer or attempt to compromise the service
+
+---
+
+**3. Data Ownership**
+
+• **Your data remains yours.** We claim no ownership of your uploaded files.
+• Analysis results are provided for your use only.
+• We do not retain, sell, or share your financial data.
+
+---
+
+**4. Service Availability**
+
+• We strive for high availability but do not guarantee uptime
+• The service is provided "as is" without warranty
+• We may modify or discontinue features with reasonable notice
+
+---
+
+**5. Limitation of Liability**
+
+• This tool provides analysis, not financial advice
+• Verify all figures against your source documents
+• We are not liable for decisions made based on this analysis
+• Maximum liability limited to fees paid in the last 12 months
+
+---
+
+**6. Payments & Refunds**
+
+• Free tier: 3 analyses, no payment required
+• Pro plan: $10/month, cancel anytime
+• Refunds considered on a case-by-case basis
+
+---
+
+**7. Termination**
+
+• You may cancel anytime
+• We may terminate accounts that violate these terms
+• Upon termination, your data will be deleted per our Privacy Policy
+
+---
+
+**8. Contact**
+
+📧 support@aquifercfo.com
         """)
     
     st.divider()
@@ -2267,7 +2471,7 @@ if 'analysis' in st.session_state:
     if user and not user.get("is_pro"):
         render_upgrade_cta(user)
 
-# Logout button in sidebar
+# Logout and account management in sidebar
 if user:
     st.sidebar.divider()
     if st.sidebar.button("Logout", use_container_width=True):
@@ -2277,3 +2481,36 @@ if user:
         if 'account_map' in st.session_state:
             del st.session_state['account_map']
         st.rerun()
+    
+    # Delete account option
+    with st.sidebar.expander("⚙️ Account Settings"):
+        st.caption(f"Signed in as: {user.get('email', 'Unknown')}")
+        st.markdown("---")
+        st.markdown("**Delete Account**")
+        st.caption("This will permanently delete your account and all associated data.")
+        
+        if st.button("🗑️ Delete My Account", type="secondary", use_container_width=True):
+            st.session_state['confirm_delete'] = True
+        
+        if st.session_state.get('confirm_delete'):
+            st.warning("⚠️ Are you sure? This cannot be undone.")
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("Yes, Delete", type="primary", use_container_width=True):
+                    try:
+                        # Delete user from database
+                        supabase = get_supabase()
+                        supabase.table("users").delete().eq("id", user["id"]).execute()
+                        
+                        # Clear session
+                        for key in list(st.session_state.keys()):
+                            del st.session_state[key]
+                        
+                        st.success("Account deleted. Goodbye!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Error deleting account. Please email privacy@aquifercfo.com")
+            with col2:
+                if st.button("Cancel", use_container_width=True):
+                    st.session_state['confirm_delete'] = False
+                    st.rerun()
