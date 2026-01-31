@@ -563,9 +563,9 @@ with st.sidebar:
             st.markdown("**📋 Requirements:**")
             st.markdown("""
             - **QuickBooks Online only** (not Desktop)
-            - Export directly from QBO → Excel (.xlsx)
+            - **Modern View mode** required for CSV export
+            - Export P&L by Month → CSV format
             - Don't modify files before uploading
-            - One report per file (single sheet)
             """)
             
             st.markdown("**💡 If months look wrong:**")
@@ -2044,8 +2044,9 @@ Your files are temporarily written to the server during analysis, then deleted w
 **What file formats are supported?**
 
 • **QuickBooks Online only** (not QuickBooks Desktop)
-• Excel files (.xlsx) exported directly from QBO
-• Chart of Accounts and General Ledger reports
+• CSV files exported from QBO (requires Modern View mode)
+• Profit & Loss by Month report (required)
+• General Ledger (optional, for transaction drill-down)
 • Raw exports only — don't modify the files before uploading
 
 ---
