@@ -990,14 +990,20 @@ def build_pnl_from_transactions(transactions: list, account_map: dict) -> dict:
 
 
 def calculate_pnl_totals(pnl_data: dict) -> dict:
-    """Calculate P&L totals from pnl_data"""
-    total_revenue = sum(abs(v) for v in pnl_data.get("Revenue", {}).values())
-    total_cogs = sum(abs(v) for v in pnl_data.get("Cost of Goods Sold", {}).values())
+    """Calculate P&L totals from pnl_data
+    
+    Uses abs(sum()) instead of sum(abs()) so that:
+    - Negative revenue entries (refunds/credits) reduce total revenue
+    - Negative expense entries (credits/adjustments) reduce total expenses
+    - etc.
+    """
+    total_revenue = abs(sum(pnl_data.get("Revenue", {}).values()))
+    total_cogs = abs(sum(pnl_data.get("Cost of Goods Sold", {}).values()))
     gross_profit = total_revenue - total_cogs
-    total_expenses = sum(abs(v) for v in pnl_data.get("Expenses", {}).values())
+    total_expenses = abs(sum(pnl_data.get("Expenses", {}).values()))
     operating_income = gross_profit - total_expenses
-    total_other_income = sum(abs(v) for v in pnl_data.get("Other Income", {}).values())
-    total_other_expense = sum(abs(v) for v in pnl_data.get("Other Expense", {}).values())
+    total_other_income = abs(sum(pnl_data.get("Other Income", {}).values()))
+    total_other_expense = abs(sum(pnl_data.get("Other Expense", {}).values()))
     net_income = operating_income + total_other_income - total_other_expense
     
     return {

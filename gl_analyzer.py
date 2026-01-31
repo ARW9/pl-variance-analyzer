@@ -408,13 +408,18 @@ def build_financial_statements(accounts: Dict[str, AccountSummary]) -> Tuple[Dic
 
 
 def calculate_metrics(pnl: dict) -> dict:
-    """Calculate key financial metrics"""
+    """Calculate key financial metrics
     
-    total_revenue = sum(abs(v) for v in pnl["Revenue"].values())
-    total_cogs = sum(abs(v) for v in pnl["Cost of Goods Sold"].values())
-    total_expenses = sum(abs(v) for v in pnl["Expenses"].values())
-    total_other_income = sum(abs(v) for v in pnl["Other Income"].values())
-    total_other_expense = sum(abs(v) for v in pnl["Other Expense"].values())
+    Uses abs(sum()) instead of sum(abs()) so that:
+    - Negative revenue entries (refunds/credits) reduce total revenue
+    - Negative expense entries (credits/adjustments) reduce total expenses
+    """
+    
+    total_revenue = abs(sum(pnl["Revenue"].values()))
+    total_cogs = abs(sum(pnl["Cost of Goods Sold"].values()))
+    total_expenses = abs(sum(pnl["Expenses"].values()))
+    total_other_income = abs(sum(pnl["Other Income"].values()))
+    total_other_expense = abs(sum(pnl["Other Expense"].values()))
     
     gross_profit = total_revenue - total_cogs
     gross_margin = (gross_profit / total_revenue * 100) if total_revenue else 0
