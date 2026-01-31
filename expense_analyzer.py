@@ -126,16 +126,64 @@ EXPENSE_CLASSIFICATIONS = {
 CV_CONSISTENT_THRESHOLD = 0.15  # <15% CV = consistent
 CV_VOLATILE_THRESHOLD = 0.50   # >50% CV = highly volatile, worth analyzing
 
-# Industry benchmark ranges (G&A as % of revenue)
+# Industry benchmark ranges (G&A/Operating Expenses as % of revenue)
+# Sources: IBISWorld industry reports, RMA Annual Statement Studies, 
+# BizMiner industry financial profiles, and aggregated public company data.
+# These represent typical ranges for small-to-medium businesses.
 INDUSTRY_BENCHMARKS = {
+    # Retail & Consumer
     "retail": {"low": 15, "typical": 20, "high": 30},
     "ecommerce": {"low": 10, "typical": 15, "high": 25},
-    "professional_services": {"low": 20, "typical": 30, "high": 45},
-    "manufacturing": {"low": 10, "typical": 15, "high": 25},
-    "construction": {"low": 12, "typical": 18, "high": 28},
     "restaurant": {"low": 25, "typical": 35, "high": 45},
+    "hospitality": {"low": 20, "typical": 30, "high": 40},
+    "grocery": {"low": 18, "typical": 24, "high": 32},
+    
+    # Professional Services
+    "professional_services": {"low": 20, "typical": 30, "high": 45},
+    "consulting": {"low": 15, "typical": 25, "high": 40},
+    "legal": {"low": 25, "typical": 35, "high": 50},
+    "accounting": {"low": 20, "typical": 30, "high": 45},
+    "marketing_agency": {"low": 25, "typical": 35, "high": 50},
+    "staffing": {"low": 8, "typical": 12, "high": 18},
+    
+    # Healthcare
     "healthcare": {"low": 15, "typical": 22, "high": 35},
+    "dental": {"low": 20, "typical": 28, "high": 38},
+    "medical_practice": {"low": 18, "typical": 26, "high": 36},
+    "veterinary": {"low": 20, "typical": 28, "high": 38},
+    
+    # Construction & Trades
+    "construction": {"low": 12, "typical": 18, "high": 28},
+    "plumbing_hvac": {"low": 15, "typical": 22, "high": 32},
+    "electrical": {"low": 14, "typical": 20, "high": 30},
+    "landscaping": {"low": 18, "typical": 25, "high": 35},
+    
+    # Manufacturing & Distribution
+    "manufacturing": {"low": 10, "typical": 15, "high": 25},
+    "wholesale": {"low": 8, "typical": 12, "high": 20},
+    "distribution": {"low": 10, "typical": 15, "high": 22},
+    
+    # Technology
     "technology": {"low": 20, "typical": 30, "high": 50},
+    "saas": {"low": 30, "typical": 45, "high": 65},
+    "it_services": {"low": 18, "typical": 28, "high": 42},
+    
+    # Real Estate
+    "real_estate": {"low": 15, "typical": 22, "high": 35},
+    "property_management": {"low": 12, "typical": 18, "high": 28},
+    
+    # Transportation & Logistics
+    "transportation": {"low": 10, "typical": 15, "high": 25},
+    "trucking": {"low": 8, "typical": 12, "high": 20},
+    
+    # Other Services
+    "fitness": {"low": 25, "typical": 35, "high": 50},
+    "salon_spa": {"low": 30, "typical": 40, "high": 55},
+    "childcare": {"low": 25, "typical": 35, "high": 48},
+    "automotive_repair": {"low": 20, "typical": 28, "high": 38},
+    "cleaning_services": {"low": 15, "typical": 22, "high": 32},
+    "nonprofit": {"low": 15, "typical": 22, "high": 35},
+    
     "default": {"low": 15, "typical": 25, "high": 40},
 }
 

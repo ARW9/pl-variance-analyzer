@@ -515,11 +515,44 @@ with st.sidebar:
         
         st.divider()
         
+        # Organized industry list
+        INDUSTRY_OPTIONS = [
+            "default",
+            # Retail & Consumer
+            "retail", "ecommerce", "restaurant", "hospitality", "grocery",
+            # Professional Services
+            "professional_services", "consulting", "legal", "accounting", "marketing_agency", "staffing",
+            # Healthcare
+            "healthcare", "dental", "medical_practice", "veterinary",
+            # Construction & Trades
+            "construction", "plumbing_hvac", "electrical", "landscaping",
+            # Manufacturing & Distribution
+            "manufacturing", "wholesale", "distribution",
+            # Technology
+            "technology", "saas", "it_services",
+            # Real Estate
+            "real_estate", "property_management",
+            # Transportation
+            "transportation", "trucking",
+            # Other Services
+            "fitness", "salon_spa", "childcare", "automotive_repair", "cleaning_services", "nonprofit",
+        ]
+        
+        def format_industry(x):
+            labels = {
+                "default": "— Select your industry —",
+                "saas": "SaaS / Software",
+                "it_services": "IT Services",
+                "plumbing_hvac": "Plumbing / HVAC",
+                "salon_spa": "Salon / Spa",
+            }
+            return labels.get(x, x.replace("_", " ").title())
+        
         industry = st.selectbox(
             "Industry (for benchmarks)",
-            options=list(INDUSTRY_BENCHMARKS.keys()),
-            index=list(INDUSTRY_BENCHMARKS.keys()).index("default"),
-            format_func=lambda x: x.replace("_", " ").title()
+            options=INDUSTRY_OPTIONS,
+            index=0,
+            format_func=format_industry
         )
         
         # Check if user can still analyze
@@ -1186,7 +1219,7 @@ def render_pnl(pnl_data: dict, title: str = "📊 Profit & Loss Statement"):
     return totals
 
 
-def render_analysis(analysis, is_demo=False, pnl_data=None, transactions=None, account_map=None):
+def render_analysis(analysis, is_demo=False, pnl_data=None, transactions=None, account_map=None, industry="default"):
     """Render analysis results - used for both real and demo data"""
     
     if is_demo:
@@ -1280,6 +1313,44 @@ def render_analysis(analysis, is_demo=False, pnl_data=None, transactions=None, a
     with col4:
         st.metric("Unidentified Vendors", format_currency(analysis.unknown_vendors_total), f"{analysis.unknown_vendors_count} txns", delta_color="inverse")
     
+    # Industry Benchmark Comparison
+    benchmark = INDUSTRY_BENCHMARKS.get(industry, INDUSTRY_BENCHMARKS["default"])
+    ga_pct = analysis.ga_as_pct_of_revenue
+    
+    if industry != "default":
+        industry_label = industry.replace("_", " ").title()
+        if ga_pct < benchmark["low"]:
+            status = "below"
+            status_color = "#f59e0b"  # warning - might be underinvesting
+            status_icon = "📉"
+            status_text = f"Below typical range — may indicate underinvestment in operations"
+        elif ga_pct > benchmark["high"]:
+            status = "above"
+            status_color = "#dc2626"  # alert
+            status_icon = "📈"
+            status_text = f"Above typical range — review for cost reduction opportunities"
+        else:
+            status = "within"
+            status_color = "#22c55e"  # good
+            status_icon = "✓"
+            status_text = f"Within healthy range for your industry"
+        
+        st.markdown(f"""
+        <div style="background: rgba(23, 23, 23, 0.8); backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 1.25rem 1.5rem; margin: 1rem 0;">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+                <div>
+                    <span style="color: #a3a3a3; font-size: 0.85rem;">Industry Benchmark: <strong style="color: white;">{industry_label}</strong></span>
+                    <div style="margin-top: 0.5rem;">
+                        <span style="color: {status_color}; font-weight: 600; font-size: 1.1rem;">{status_icon} Your OpEx: {ga_pct:.1f}%</span>
+                        <span style="color: #737373; margin: 0 0.75rem;">|</span>
+                        <span style="color: #a3a3a3;">Typical range: {benchmark['low']}% – {benchmark['high']}%</span>
+                    </div>
+                </div>
+                <div style="color: #a3a3a3; font-size: 0.85rem; max-width: 300px;">{status_text}</div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+    
     st.divider()
     
     # Tabs
@@ -1348,6 +1419,28 @@ def render_analysis(analysis, is_demo=False, pnl_data=None, transactions=None, a
             st.dataframe(df, column_config={"Total Spend": st.column_config.NumberColumn(format="$%.2f"), "Avg Transaction": st.column_config.NumberColumn(format="$%.2f")}, hide_index=True, use_container_width=True)
         if analysis.unknown_vendors_total > 0:
             st.error(f"⚠️ {format_currency(analysis.unknown_vendors_total)} in expenses have no vendor identified ({analysis.unknown_vendors_count} transactions)")
+            
+            # Show unknown vendor transactions if we have transaction data
+            if transactions:
+                unknown_txns = [t for t in transactions if not t.vendor or t.vendor.strip() == "" or t.vendor.strip().lower() == "unknown"]
+                if unknown_txns:
+                    with st.expander(f"📋 View {len(unknown_txns)} Unidentified Transactions", expanded=False):
+                        st.caption("These transactions have no vendor name — consider updating them in QuickBooks for better tracking.")
+                        unknown_data = [{
+                            "Date": t.date,
+                            "Account": t.account,
+                            "Description": t.description[:50] + "..." if len(t.description) > 50 else t.description,
+                            "Amount": t.amount
+                        } for t in sorted(unknown_txns, key=lambda x: -abs(x.amount))[:100]]  # Top 100 by amount
+                        df = pd.DataFrame(unknown_data)
+                        st.dataframe(
+                            df, 
+                            column_config={"Amount": st.column_config.NumberColumn(format="$%.2f")}, 
+                            hide_index=True, 
+                            use_container_width=True
+                        )
+                        if len(unknown_txns) > 100:
+                            st.caption(f"Showing top 100 of {len(unknown_txns)} transactions by amount")
     
     with tab5:
         st.subheader("Understanding Your Numbers")
@@ -1485,6 +1578,12 @@ Your files are temporarily written to the server during analysis, then deleted w
 **Can I cancel Pro anytime?**
 
 Yes! Month-to-month, no contracts. Cancel anytime via email or Stripe portal.
+
+---
+
+**Where do the industry benchmarks come from?**
+
+Our industry benchmarks are compiled from multiple sources including IBISWorld industry reports, RMA Annual Statement Studies, BizMiner industry financial profiles, and aggregated public company financial data. The ranges represent typical operating expense ratios for small-to-medium businesses in each industry. These are general guidelines — your specific situation may vary based on business model, growth stage, and regional factors.
         """)
     
     st.divider()
@@ -1536,6 +1635,7 @@ if analyze_btn and coa_file and gl_file and user:
             st.session_state['account_map'] = account_map
             st.session_state['pnl_data'] = pnl_data
             st.session_state['transactions'] = transactions
+            st.session_state['industry'] = industry
             
             st.rerun()
             
@@ -1549,6 +1649,7 @@ if 'analysis' in st.session_state:
     pnl_data = st.session_state.get('pnl_data')
     transactions = st.session_state.get('transactions', [])
     account_map = st.session_state.get('account_map', {})
+    selected_industry = st.session_state.get('industry', 'default')
     
     # Clear analysis button
     if st.sidebar.button("🔄 New Analysis", use_container_width=True):
@@ -1558,9 +1659,11 @@ if 'analysis' in st.session_state:
             del st.session_state['pnl_data']
         if 'transactions' in st.session_state:
             del st.session_state['transactions']
+        if 'industry' in st.session_state:
+            del st.session_state['industry']
         st.rerun()
     
-    render_analysis(analysis, is_demo=False, pnl_data=pnl_data, transactions=transactions, account_map=account_map)
+    render_analysis(analysis, is_demo=False, pnl_data=pnl_data, transactions=transactions, account_map=account_map, industry=selected_industry)
     
     # Show upgrade CTA for free users
     if user and not user.get("is_pro"):
