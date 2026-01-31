@@ -70,100 +70,173 @@ def parse_gl_with_mapping(gl_file: str, account_map: Dict[str, AccountType]) -> 
     
     # Find header row (contains "Date", "Transaction Type", etc.)
     header_row = None
+    header_cols = {}  # Map column names to indices
+    
     for i, row in df.iterrows():
-        if 'Date' in str(row.values):
+        row_str = ' '.join([str(v).lower() for v in row.values if pd.notna(v)])
+        if 'date' in row_str and ('type' in row_str or 'transaction' in row_str or 'amount' in row_str):
             header_row = i
+            # Map column names to indices
+            for j, val in enumerate(row.values):
+                if pd.notna(val):
+                    col_name = str(val).strip().lower()
+                    header_cols[col_name] = j
             break
     
     if header_row is None:
         header_row = 3  # Default QBO position
     
+    # Flexible column detection - find likely columns by name
+    def find_col(names, default=None):
+        """Find column index by trying multiple name variations"""
+        for name in names:
+            for col_name, idx in header_cols.items():
+                if name in col_name:
+                    return idx
+        return default
+    
+    date_col = find_col(['date'], 1)
+    vendor_col = find_col(['name', 'vendor', 'payee', 'customer'], 5)
+    desc_col = find_col(['memo', 'description', 'desc'], 6)
+    amount_col = find_col(['amount'], 8)
+    
+    # Also check for debit/credit columns if no amount column
+    debit_col = find_col(['debit'], None)
+    credit_col = find_col(['credit'], None)
+    
     # Parse accounts and transactions
     for i, row in df.iterrows():
         if i <= header_row:
             continue
+        
+        try:
+            col0 = str(row[0]).strip() if pd.notna(row[0]) else ""
+            col1 = str(row[1]).strip() if pd.notna(row[1]) else ""
             
-        col0 = str(row[0]).strip() if pd.notna(row[0]) else ""
-        col1 = str(row[1]).strip() if pd.notna(row[1]) else ""
-        
-        if col0 == "nan":
-            col0 = ""
-        if col1 == "nan":
-            col1 = ""
-        
-        # Skip completely empty rows
-        if not col0 and not col1:
-            continue
-        
-        # Check if this is an account header (has value in col0, nothing meaningful in col1)
-        if col0 and (pd.isna(row[1]) or col1 == "" or col1 == "Beginning Balance") and not col0.startswith("Total"):
-            # This is an account name
-            current_account = col0.strip()
-            # Look up type in mapping
-            current_account_type = account_map.get(current_account, AccountType.UNKNOWN)
+            if col0 == "nan":
+                col0 = ""
+            if col1 == "nan":
+                col1 = ""
             
-            # Try smarter matching if exact match fails
-            if current_account_type == AccountType.UNKNOWN:
-                for mapped_name, mapped_type in account_map.items():
-                    if mapped_name.endswith(":" + current_account) or mapped_name == current_account:
-                        current_account_type = mapped_type
-                        break
+            # Skip completely empty rows
+            if not col0 and not col1:
+                continue
+            
+            # Check if this is an account header (has value in col0, nothing meaningful in col1)
+            if col0 and (pd.isna(row[1]) or col1 == "" or col1 == "Beginning Balance") and not col0.startswith("Total"):
+                # This is an account name
+                current_account = col0.strip()
+                # Look up type in mapping
+                current_account_type = account_map.get(current_account, AccountType.UNKNOWN)
+                
+                # Try smarter matching if exact match fails
                 if current_account_type == AccountType.UNKNOWN:
                     for mapped_name, mapped_type in account_map.items():
-                        if mapped_name.lower().endswith(":" + current_account.lower()):
+                        if mapped_name.endswith(":" + current_account) or mapped_name == current_account:
                             current_account_type = mapped_type
                             break
-            
-            if current_account not in accounts:
-                accounts[current_account] = AccountSummary(
-                    name=current_account,
-                    account_type=current_account_type,
-                    total=0,
-                    transaction_count=0,
-                    transactions=[]
-                )
-        
-        # Skip all "Total for" lines - we'll calculate totals from transactions
-        elif col0.startswith("Total for "):
-            continue
-        
-        # Otherwise it might be a transaction row
-        elif current_account and col1 and col1 != "nan" and col1 != "Beginning Balance":
-            # Transaction row: Date in col1, Type in col2, etc.
-            date = col1
-            # Handle datetime objects
-            if hasattr(row[1], 'strftime'):
-                date = row[1].strftime('%m/%d/%Y')
-            
-            vendor = str(row[5]).strip() if len(row) > 5 and pd.notna(row[5]) else ""
-            if vendor == "nan":
-                vendor = ""
-            description = str(row[6]).strip() if len(row) > 6 and pd.notna(row[6]) else ""
-            if description == "nan":
-                description = ""
-            
-            # Amount is typically in column 8
-            amount = 0
-            try:
-                if len(row) > 8 and pd.notna(row[8]):
-                    amount = float(row[8])
-            except:
-                pass
-            
-            if date and date != "nan":
-                txn = Transaction(
-                    date=date,
-                    account=current_account,
-                    account_type=current_account_type,
-                    description=description,
-                    amount=amount,
-                    vendor=vendor
-                )
-                all_transactions.append(txn)
+                    if current_account_type == AccountType.UNKNOWN:
+                        for mapped_name, mapped_type in account_map.items():
+                            if mapped_name.lower().endswith(":" + current_account.lower()):
+                                current_account_type = mapped_type
+                                break
                 
-                if current_account in accounts:
-                    accounts[current_account].transactions.append(txn)
-                    accounts[current_account].transaction_count += 1
+                if current_account not in accounts:
+                    accounts[current_account] = AccountSummary(
+                        name=current_account,
+                        account_type=current_account_type,
+                        total=0,
+                        transaction_count=0,
+                        transactions=[]
+                    )
+            
+            # Skip all "Total for" lines - we'll calculate totals from transactions
+            elif col0.startswith("Total for ") or col0.startswith("Total "):
+                continue
+            
+            # Otherwise it might be a transaction row
+            elif current_account and col1 and col1 != "nan" and col1 != "Beginning Balance":
+                # Get date from detected column
+                date_val = row[date_col] if date_col and len(row) > date_col else row[1]
+                date = ""
+                if pd.notna(date_val):
+                    if hasattr(date_val, 'strftime'):
+                        date = date_val.strftime('%Y-%m-%d')
+                    else:
+                        date = str(date_val).strip()
+                
+                # Get vendor
+                vendor = ""
+                if vendor_col and len(row) > vendor_col and pd.notna(row[vendor_col]):
+                    vendor = str(row[vendor_col]).strip()
+                    if vendor == "nan":
+                        vendor = ""
+                
+                # Get description
+                description = ""
+                if desc_col and len(row) > desc_col and pd.notna(row[desc_col]):
+                    description = str(row[desc_col]).strip()
+                    if description == "nan":
+                        description = ""
+                
+                # Get amount - try multiple strategies
+                amount = 0
+                try:
+                    # Strategy 1: Use detected amount column
+                    if amount_col and len(row) > amount_col and pd.notna(row[amount_col]):
+                        val = row[amount_col]
+                        if isinstance(val, str):
+                            val = val.replace(',', '').replace('$', '').replace('(', '-').replace(')', '')
+                        amount = float(val)
+                    # Strategy 2: Use debit/credit columns
+                    elif debit_col is not None or credit_col is not None:
+                        debit = 0
+                        credit = 0
+                        if debit_col and len(row) > debit_col and pd.notna(row[debit_col]):
+                            val = row[debit_col]
+                            if isinstance(val, str):
+                                val = val.replace(',', '').replace('$', '')
+                            debit = float(val) if val else 0
+                        if credit_col and len(row) > credit_col and pd.notna(row[credit_col]):
+                            val = row[credit_col]
+                            if isinstance(val, str):
+                                val = val.replace(',', '').replace('$', '')
+                            credit = float(val) if val else 0
+                        amount = debit - credit
+                    # Strategy 3: Search last few columns for a number
+                    else:
+                        for col_idx in range(len(row) - 1, max(0, len(row) - 4), -1):
+                            if pd.notna(row[col_idx]):
+                                try:
+                                    val = row[col_idx]
+                                    if isinstance(val, str):
+                                        val = val.replace(',', '').replace('$', '').replace('(', '-').replace(')', '')
+                                    test_amount = float(val)
+                                    if test_amount != 0:
+                                        amount = test_amount
+                                        break
+                                except:
+                                    pass
+                except:
+                    pass
+                
+                if date and date != "nan":
+                    txn = Transaction(
+                        date=date,
+                        account=current_account,
+                        account_type=current_account_type,
+                        description=description,
+                        amount=amount,
+                        vendor=vendor
+                    )
+                    all_transactions.append(txn)
+                    
+                    if current_account in accounts:
+                        accounts[current_account].transactions.append(txn)
+                        accounts[current_account].transaction_count += 1
+        except Exception as e:
+            # Skip malformed rows but continue processing
+            continue
     
     # Calculate totals from transactions (not from "Total for" lines)
     for account_name, account in accounts.items():

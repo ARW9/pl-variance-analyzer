@@ -22,40 +22,81 @@ class AccountType(Enum):
     UNKNOWN = "Unknown"
 
 
-# QBO account type mappings (handles various QBO formats)
+# QBO account type mappings (handles various QBO formats and regional variations)
 QBO_TYPE_MAP = {
     # Assets
     "Bank": AccountType.ASSET,
+    "Cash": AccountType.ASSET,
+    "Cash and cash equivalents": AccountType.ASSET,
     "Accounts Receivable": AccountType.ASSET,
     "Accounts receivable (A/R)": AccountType.ASSET,
+    "A/R": AccountType.ASSET,
     "Other Current Asset": AccountType.ASSET,
     "Other Current Assets": AccountType.ASSET,
+    "Current Assets": AccountType.ASSET,
     "Fixed Asset": AccountType.ASSET,
+    "Fixed Assets": AccountType.ASSET,
     "Other Asset": AccountType.ASSET,
+    "Other Assets": AccountType.ASSET,
     "Long-term Assets": AccountType.ASSET,
+    "Non-current Assets": AccountType.ASSET,
     "Property, plant and equipment": AccountType.ASSET,
+    "Inventory": AccountType.ASSET,
+    "Prepaid Expenses": AccountType.ASSET,
     
     # Liabilities
     "Accounts Payable": AccountType.LIABILITY,
     "Accounts payable (A/P)": AccountType.LIABILITY,
+    "A/P": AccountType.LIABILITY,
     "Credit Card": AccountType.LIABILITY,
     "Other Current Liability": AccountType.LIABILITY,
     "Other Current Liabilities": AccountType.LIABILITY,
+    "Current Liabilities": AccountType.LIABILITY,
     "Long Term Liability": AccountType.LIABILITY,
     "Long-term Liabilities": AccountType.LIABILITY,
+    "Non-current Liabilities": AccountType.LIABILITY,
+    "Payroll Liabilities": AccountType.LIABILITY,
+    "Sales Tax Payable": AccountType.LIABILITY,
+    "Loan": AccountType.LIABILITY,
+    "Line of Credit": AccountType.LIABILITY,
     
     # Equity
     "Equity": AccountType.EQUITY,
+    "Owner's Equity": AccountType.EQUITY,
+    "Shareholders' Equity": AccountType.EQUITY,
+    "Retained Earnings": AccountType.EQUITY,
+    "Opening Balance Equity": AccountType.EQUITY,
     
-    # Income
+    # Income / Revenue
     "Income": AccountType.REVENUE,
+    "Revenue": AccountType.REVENUE,
+    "Sales": AccountType.REVENUE,
+    "Service Revenue": AccountType.REVENUE,
+    "Sales Revenue": AccountType.REVENUE,
     "Other Income": AccountType.OTHER_INCOME,
+    "Interest Income": AccountType.OTHER_INCOME,
+    "Dividend Income": AccountType.OTHER_INCOME,
+    
+    # Cost of Goods Sold
+    "Cost of Goods Sold": AccountType.COGS,
+    "COGS": AccountType.COGS,
+    "Cost of Sales": AccountType.COGS,
+    "Cost of Revenue": AccountType.COGS,
+    "Direct Costs": AccountType.COGS,
     
     # Expenses
-    "Cost of Goods Sold": AccountType.COGS,
     "Expense": AccountType.EXPENSE,
     "Expenses": AccountType.EXPENSE,
+    "Operating Expense": AccountType.EXPENSE,
+    "Operating Expenses": AccountType.EXPENSE,
+    "General & Administrative": AccountType.EXPENSE,
+    "G&A": AccountType.EXPENSE,
+    "Selling Expense": AccountType.EXPENSE,
     "Other Expense": AccountType.OTHER_EXPENSE,
+    "Other Expenses": AccountType.OTHER_EXPENSE,
+    "Interest Expense": AccountType.OTHER_EXPENSE,
+    "Depreciation": AccountType.EXPENSE,
+    "Amortization": AccountType.EXPENSE,
 }
 
 
@@ -63,18 +104,23 @@ def parse_qbo_coa(file_path: str) -> Dict[str, AccountType]:
     """
     Parse QBO Chart of Accounts export
     
-    Expected columns: Full name, Type, Detail Type, Description, Total balance
+    Handles various QBO export formats with flexible column detection
     """
     # First, find the header row
     df_raw = pd.read_excel(file_path, sheet_name=0, header=None)
     
     header_row = 0
-    for i in range(min(10, len(df_raw))):
+    for i in range(min(15, len(df_raw))):
         row_values = [str(v).lower() for v in df_raw.iloc[i].values if pd.notna(v)]
-        if any('full name' in v or ('name' in v and 'type' in str(df_raw.iloc[i].values)) for v in row_values):
+        row_str = ' '.join(row_values)
+        # Look for rows that contain both name-like and type-like columns
+        has_name = any(x in row_str for x in ['name', 'account'])
+        has_type = 'type' in row_str
+        if has_name and has_type:
             header_row = i
             break
-        if 'type' in row_values:
+        # Fallback: just "type" column
+        if 'type' in row_values and any('name' in v or 'account' in v for v in row_values):
             header_row = i
             break
     
@@ -84,15 +130,34 @@ def parse_qbo_coa(file_path: str) -> Dict[str, AccountType]:
     # Normalize column names
     df.columns = [str(c).strip().lower() for c in df.columns]
     
-    # Find the name and type columns
-    name_col = None
-    type_col = None
+    # Flexible column detection
+    def find_col(candidates):
+        """Find column by trying multiple name variations"""
+        for col in df.columns:
+            for candidate in candidates:
+                if candidate in col:
+                    return col
+        return None
     
-    for col in df.columns:
-        if 'full name' in col or col == 'name' or col == 'account':
-            name_col = col
-        if col == 'type':
-            type_col = col
+    # Find the name and type columns with multiple fallbacks
+    name_col = find_col(['full name', 'account name', 'name', 'account'])
+    type_col = find_col(['account type', 'type'])
+    
+    # If we still can't find columns, try positional guessing
+    if not name_col:
+        # First non-empty looking column is probably the name
+        for col in df.columns:
+            if 'unnamed' not in col and col not in ['type', 'balance', 'total']:
+                name_col = col
+                break
+    
+    if not type_col:
+        # Look for a column that contains account type values
+        for col in df.columns:
+            sample_vals = df[col].dropna().head(10).astype(str).tolist()
+            if any(v in QBO_TYPE_MAP for v in sample_vals):
+                type_col = col
+                break
     
     if not name_col or not type_col:
         raise ValueError(f"Could not find Name and Type columns. Found: {list(df.columns)}")
@@ -101,13 +166,24 @@ def parse_qbo_coa(file_path: str) -> Dict[str, AccountType]:
     account_map = {}
     
     for _, row in df.iterrows():
-        name = str(row[name_col]).strip() if pd.notna(row[name_col]) else ""
-        qbo_type = str(row[type_col]).strip() if pd.notna(row[type_col]) else ""
-        
-        if name and name != "nan" and qbo_type:
-            # Map QBO type to our AccountType
-            account_type = QBO_TYPE_MAP.get(qbo_type, AccountType.UNKNOWN)
-            account_map[name] = account_type
+        try:
+            name = str(row[name_col]).strip() if pd.notna(row[name_col]) else ""
+            qbo_type = str(row[type_col]).strip() if pd.notna(row[type_col]) else ""
+            
+            if name and name != "nan" and qbo_type and qbo_type != "nan":
+                # Map QBO type to our AccountType
+                account_type = QBO_TYPE_MAP.get(qbo_type, AccountType.UNKNOWN)
+                
+                # Try case-insensitive matching if exact match fails
+                if account_type == AccountType.UNKNOWN:
+                    for qbo_key, mapped_type in QBO_TYPE_MAP.items():
+                        if qbo_key.lower() == qbo_type.lower():
+                            account_type = mapped_type
+                            break
+                
+                account_map[name] = account_type
+        except:
+            continue
     
     return account_map
 
