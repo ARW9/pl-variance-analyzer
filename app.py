@@ -1357,11 +1357,27 @@ def render_pnl_comparison(pnl_current: dict, pnl_prior: dict, label_current: str
     return totals_current, totals_prior
 
 
-def render_pnl(pnl_data: dict, title: str = "📊 Profit & Loss Statement"):
-    """Render a single-period P&L statement"""
+def render_pnl(pnl_data: dict, title: str = "📊 Profit & Loss Statement", qbo_totals: dict = None):
+    """Render a single-period P&L statement. Uses qbo_totals if provided (source of truth)."""
     st.header(title)
     
-    totals = calculate_pnl_totals(pnl_data)
+    # Use QBO totals if provided, otherwise calculate from line items
+    if qbo_totals:
+        totals = {
+            "total_revenue": qbo_totals.get("revenue", 0),
+            "total_cogs": qbo_totals.get("cogs", 0),
+            "gross_profit": qbo_totals.get("gross_profit", 0),
+            "gross_margin": (qbo_totals.get("gross_profit", 0) / qbo_totals.get("revenue", 1) * 100) if qbo_totals.get("revenue", 0) else 0,
+            "total_expenses": qbo_totals.get("expenses", 0),
+            "operating_income": qbo_totals.get("operating_income", 0),
+            "operating_margin": (qbo_totals.get("operating_income", 0) / qbo_totals.get("revenue", 1) * 100) if qbo_totals.get("revenue", 0) else 0,
+            "total_other_income": qbo_totals.get("other_income", 0),
+            "total_other_expense": qbo_totals.get("other_expense", 0),
+            "net_income": qbo_totals.get("net_income", 0),
+            "net_margin": (qbo_totals.get("net_income", 0) / qbo_totals.get("revenue", 1) * 100) if qbo_totals.get("revenue", 0) else 0,
+        }
+    else:
+        totals = calculate_pnl_totals(pnl_data)
     
     # Summary metrics at top - Row 1
     col1, col2, col3, col4 = st.columns(4)
@@ -1385,10 +1401,8 @@ def render_pnl(pnl_data: dict, title: str = "📊 Profit & Loss Statement"):
         cogs_ratio = (totals["total_cogs"] / totals["total_revenue"] * 100) if totals["total_revenue"] else 0
         st.caption(f"COGS Ratio: {cogs_ratio:.1f}%")
     with col6:
-        operating_income = totals["gross_profit"] - totals["total_expenses"]
-        st.metric("Operating Income", format_currency(operating_income))
-        op_margin = (operating_income / totals["total_revenue"] * 100) if totals["total_revenue"] else 0
-        st.caption(f"Operating Margin: {op_margin:.1f}%")
+        st.metric("Operating Income", format_currency(totals["operating_income"]))
+        st.caption(f"Operating Margin: {totals['operating_margin']:.1f}%")
     with col7:
         other_net = totals.get("total_other_income", 0) - totals.get("total_other_expense", 0)
         st.metric("Other Income/Exp", format_currency(other_net))
@@ -1621,7 +1635,7 @@ def render_pl_analysis(statement, summary, variances, industry="default"):
         st.dataframe(df, hide_index=True, use_container_width=True, height=600)
 
 
-def render_analysis(analysis, is_demo=False, pnl_data=None, transactions=None, account_map=None, industry="default"):
+def render_analysis(analysis, is_demo=False, pnl_data=None, transactions=None, account_map=None, industry="default", qbo_totals=None):
     """Render analysis results - used for both real and demo data"""
     
     if is_demo:
@@ -1726,16 +1740,16 @@ def render_analysis(analysis, is_demo=False, pnl_data=None, transactions=None, a
             else:
                 # Full year view
                 if pnl_data:
-                    render_pnl(pnl_data, "📊 Full Year P&L")
+                    render_pnl(pnl_data, "📊 Full Year P&L", qbo_totals=qbo_totals)
                     st.divider()
         else:
             # No month data, show full P&L
             if pnl_data:
-                render_pnl(pnl_data)
+                render_pnl(pnl_data, qbo_totals=qbo_totals)
                 st.divider()
     elif pnl_data:
         # Demo mode or no transactions - just show P&L
-        render_pnl(pnl_data)
+        render_pnl(pnl_data, qbo_totals=qbo_totals)
         st.divider()
     
     # Summary metrics
@@ -2272,6 +2286,7 @@ if analyze_btn and pl_file and user:
             # Store in session state (using existing keys for render_analysis compatibility)
             st.session_state['analysis'] = analysis
             st.session_state['pnl_data'] = pnl_data
+            st.session_state['pnl_totals'] = summary['totals']  # QBO totals - source of truth
             st.session_state['transactions'] = transactions
             st.session_state['account_map'] = {}  # Empty - no COA needed
             st.session_state['industry'] = industry
@@ -2305,6 +2320,7 @@ if analyze_btn and pl_file and user:
 if 'analysis' in st.session_state:
     analysis = st.session_state['analysis']
     pnl_data = st.session_state.get('pnl_data')
+    qbo_totals = st.session_state.get('pnl_totals')  # QBO totals - source of truth
     transactions = st.session_state.get('transactions', [])
     account_map = st.session_state.get('account_map', {})
     selected_industry = st.session_state.get('industry', 'default')
@@ -2315,6 +2331,8 @@ if 'analysis' in st.session_state:
         del st.session_state['analysis']
         if 'pnl_data' in st.session_state:
             del st.session_state['pnl_data']
+        if 'pnl_totals' in st.session_state:
+            del st.session_state['pnl_totals']
         if 'transactions' in st.session_state:
             del st.session_state['transactions']
         if 'account_map' in st.session_state:
@@ -2324,7 +2342,7 @@ if 'analysis' in st.session_state:
         st.rerun()
     
     # Use the existing render_analysis function
-    render_analysis(analysis, is_demo=False, pnl_data=pnl_data, transactions=transactions, account_map=account_map, industry=selected_industry)
+    render_analysis(analysis, is_demo=False, pnl_data=pnl_data, transactions=transactions, account_map=account_map, industry=selected_industry, qbo_totals=qbo_totals)
     
     # Show upgrade CTA for free users
     if user and not user.get("is_pro"):
