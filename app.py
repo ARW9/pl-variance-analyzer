@@ -390,13 +390,13 @@ def run_analysis(coa_path: str, gl_path: str, industry: str):
     # Also build P&L for display
     from gl_analyzer import load_account_mapping
     type_map = load_account_mapping(mapping_path)
-    accounts, _ = parse_gl_with_mapping(gl_path, type_map)
+    accounts, transactions = parse_gl_with_mapping(gl_path, type_map)
     pnl_data, _ = build_financial_statements(accounts)
     
     # Cleanup
     os.unlink(mapping_path)
     
-    return analysis, account_map, pnl_data
+    return analysis, account_map, pnl_data, transactions
 
 
 # Create mock demo data
@@ -533,11 +533,82 @@ def get_demo_analysis():
     )
 
 
-def render_pnl(pnl_data: dict, title: str = "📊 Profit & Loss Statement"):
-    """Render a proper P&L statement"""
-    st.header(title)
+def extract_months_from_transactions(transactions: list) -> list:
+    """Extract unique months from transaction dates"""
+    months = set()
+    for txn in transactions:
+        try:
+            date_str = txn.date if hasattr(txn, 'date') else txn.get('date', '')
+            if '/' in str(date_str):
+                parts = str(date_str).split('/')
+                if len(parts) >= 3:
+                    month_key = f"{parts[2]}-{parts[0].zfill(2)}"  # YYYY-MM
+                    months.add(month_key)
+            elif '-' in str(date_str):
+                month_key = str(date_str)[:7]  # YYYY-MM
+                months.add(month_key)
+        except:
+            pass
+    return sorted(months)
+
+
+def filter_transactions_by_month(transactions: list, month: str) -> list:
+    """Filter transactions to a specific month (YYYY-MM format)"""
+    filtered = []
+    for txn in transactions:
+        try:
+            date_str = txn.date if hasattr(txn, 'date') else txn.get('date', '')
+            if '/' in str(date_str):
+                parts = str(date_str).split('/')
+                if len(parts) >= 3:
+                    txn_month = f"{parts[2]}-{parts[0].zfill(2)}"
+                    if txn_month == month:
+                        filtered.append(txn)
+            elif '-' in str(date_str):
+                if str(date_str)[:7] == month:
+                    filtered.append(txn)
+        except:
+            pass
+    return filtered
+
+
+def build_pnl_from_transactions(transactions: list, account_map: dict) -> dict:
+    """Build P&L data from filtered transactions"""
+    from collections import defaultdict
     
-    # Calculate totals
+    pnl = {
+        "Revenue": defaultdict(float),
+        "Cost of Goods Sold": defaultdict(float),
+        "Expenses": defaultdict(float),
+        "Other Income": defaultdict(float),
+        "Other Expense": defaultdict(float)
+    }
+    
+    for txn in transactions:
+        acct = txn.account if hasattr(txn, 'account') else txn.get('account', '')
+        acct_type = txn.account_type if hasattr(txn, 'account_type') else txn.get('account_type')
+        amount = txn.amount if hasattr(txn, 'amount') else txn.get('amount', 0)
+        
+        # Convert enum to string if needed
+        type_str = acct_type.value if hasattr(acct_type, 'value') else str(acct_type)
+        
+        if type_str == "Revenue":
+            pnl["Revenue"][acct] += amount
+        elif type_str == "Cost of Goods Sold":
+            pnl["Cost of Goods Sold"][acct] += amount
+        elif type_str == "Expense":
+            pnl["Expenses"][acct] += amount
+        elif type_str == "Other Income":
+            pnl["Other Income"][acct] += amount
+        elif type_str == "Other Expense":
+            pnl["Other Expense"][acct] += amount
+    
+    # Convert defaultdicts to regular dicts
+    return {k: dict(v) for k, v in pnl.items()}
+
+
+def calculate_pnl_totals(pnl_data: dict) -> dict:
+    """Calculate P&L totals from pnl_data"""
     total_revenue = sum(abs(v) for v in pnl_data.get("Revenue", {}).values())
     total_cogs = sum(abs(v) for v in pnl_data.get("Cost of Goods Sold", {}).values())
     gross_profit = total_revenue - total_cogs
@@ -547,82 +618,334 @@ def render_pnl(pnl_data: dict, title: str = "📊 Profit & Loss Statement"):
     total_other_expense = sum(abs(v) for v in pnl_data.get("Other Expense", {}).values())
     net_income = operating_income + total_other_income - total_other_expense
     
-    # P&L Table
-    pnl_rows = []
-    
-    # Revenue section
-    pnl_rows.append({"Category": "**REVENUE**", "Amount": ""})
-    for name, amt in sorted(pnl_data.get("Revenue", {}).items(), key=lambda x: -abs(x[1])):
-        pnl_rows.append({"Category": f"    {name}", "Amount": format_currency(abs(amt))})
-    pnl_rows.append({"Category": "**Total Revenue**", "Amount": f"**{format_currency(total_revenue)}**"})
-    pnl_rows.append({"Category": "", "Amount": ""})
-    
-    # COGS section
-    pnl_rows.append({"Category": "**COST OF GOODS SOLD**", "Amount": ""})
-    for name, amt in sorted(pnl_data.get("Cost of Goods Sold", {}).items(), key=lambda x: -abs(x[1])):
-        pnl_rows.append({"Category": f"    {name}", "Amount": format_currency(abs(amt))})
-    pnl_rows.append({"Category": "**Total COGS**", "Amount": f"**{format_currency(total_cogs)}**"})
-    pnl_rows.append({"Category": "", "Amount": ""})
-    
-    # Gross Profit
-    gross_margin = (gross_profit / total_revenue * 100) if total_revenue else 0
-    pnl_rows.append({"Category": "**GROSS PROFIT**", "Amount": f"**{format_currency(gross_profit)}** ({gross_margin:.1f}%)"})
-    pnl_rows.append({"Category": "", "Amount": ""})
-    
-    # Expenses section
-    pnl_rows.append({"Category": "**OPERATING EXPENSES**", "Amount": ""})
-    for name, amt in sorted(pnl_data.get("Expenses", {}).items(), key=lambda x: -abs(x[1])):
-        pnl_rows.append({"Category": f"    {name}", "Amount": format_currency(abs(amt))})
-    pnl_rows.append({"Category": "**Total Operating Expenses**", "Amount": f"**{format_currency(total_expenses)}**"})
-    pnl_rows.append({"Category": "", "Amount": ""})
-    
-    # Operating Income
-    op_margin = (operating_income / total_revenue * 100) if total_revenue else 0
-    pnl_rows.append({"Category": "**OPERATING INCOME**", "Amount": f"**{format_currency(operating_income)}** ({op_margin:.1f}%)"})
-    pnl_rows.append({"Category": "", "Amount": ""})
-    
-    # Other Income/Expense
-    if pnl_data.get("Other Income") or pnl_data.get("Other Expense"):
-        pnl_rows.append({"Category": "**OTHER INCOME/EXPENSE**", "Amount": ""})
-        for name, amt in pnl_data.get("Other Income", {}).items():
-            pnl_rows.append({"Category": f"    {name}", "Amount": format_currency(abs(amt))})
-        for name, amt in pnl_data.get("Other Expense", {}).items():
-            pnl_rows.append({"Category": f"    {name}", "Amount": f"({format_currency(abs(amt))})"})
-        pnl_rows.append({"Category": "**Net Other**", "Amount": f"**{format_currency(total_other_income - total_other_expense)}**"})
-        pnl_rows.append({"Category": "", "Amount": ""})
-    
-    # Net Income
-    net_margin = (net_income / total_revenue * 100) if total_revenue else 0
-    pnl_rows.append({"Category": "**NET INCOME**", "Amount": f"**{format_currency(net_income)}** ({net_margin:.1f}%)"})
-    
-    # Display as table (using st.dataframe to avoid tabulate dependency)
-    df = pd.DataFrame(pnl_rows)
-    st.dataframe(df, hide_index=True, use_container_width=True)
-    
     return {
         "total_revenue": total_revenue,
         "total_cogs": total_cogs,
         "gross_profit": gross_profit,
+        "gross_margin": (gross_profit / total_revenue * 100) if total_revenue else 0,
         "total_expenses": total_expenses,
         "operating_income": operating_income,
-        "net_income": net_income
+        "operating_margin": (operating_income / total_revenue * 100) if total_revenue else 0,
+        "total_other_income": total_other_income,
+        "total_other_expense": total_other_expense,
+        "net_income": net_income,
+        "net_margin": (net_income / total_revenue * 100) if total_revenue else 0
     }
 
 
-def render_analysis(analysis, is_demo=False, pnl_data=None):
+def format_variance(current: float, prior: float) -> tuple:
+    """Calculate and format variance"""
+    if prior == 0:
+        if current == 0:
+            return 0, "—"
+        return current, "New"
+    
+    variance = current - prior
+    pct_change = (variance / abs(prior)) * 100
+    
+    return variance, f"{pct_change:+.1f}%"
+
+
+def render_pnl_comparison(pnl_current: dict, pnl_prior: dict, label_current: str, label_prior: str):
+    """Render side-by-side P&L comparison with variances"""
+    st.header("📊 P&L Comparison")
+    
+    totals_current = calculate_pnl_totals(pnl_current)
+    totals_prior = calculate_pnl_totals(pnl_prior)
+    
+    # Build comparison rows
+    rows = []
+    
+    def add_section(section_name: str, current_data: dict, prior_data: dict, is_expense: bool = False):
+        rows.append({
+            "Account": f"**{section_name}**",
+            label_prior: "",
+            label_current: "",
+            "Variance $": "",
+            "Variance %": ""
+        })
+        
+        # Get all accounts from both periods
+        all_accounts = set(current_data.keys()) | set(prior_data.keys())
+        
+        # Sort by current amount (descending)
+        sorted_accounts = sorted(all_accounts, key=lambda x: -abs(current_data.get(x, 0)))
+        
+        for acct in sorted_accounts:
+            curr = abs(current_data.get(acct, 0))
+            prior = abs(prior_data.get(acct, 0))
+            var_amt, var_pct = format_variance(curr, prior)
+            
+            # Color code significant variances
+            var_color = ""
+            if isinstance(var_pct, str) and var_pct not in ["—", "New"]:
+                pct_val = float(var_pct.replace("%", "").replace("+", ""))
+                if is_expense:
+                    # For expenses, increase is bad (red), decrease is good (green)
+                    if pct_val > 10:
+                        var_color = "🔴 "
+                    elif pct_val < -10:
+                        var_color = "🟢 "
+                else:
+                    # For revenue, increase is good (green), decrease is bad (red)
+                    if pct_val > 10:
+                        var_color = "🟢 "
+                    elif pct_val < -10:
+                        var_color = "🔴 "
+            
+            rows.append({
+                "Account": f"    {acct}",
+                label_prior: format_currency(prior) if prior else "—",
+                label_current: format_currency(curr) if curr else "—",
+                "Variance $": format_currency(var_amt) if var_amt else "—",
+                "Variance %": f"{var_color}{var_pct}"
+            })
+    
+    # Revenue
+    add_section("REVENUE", pnl_current.get("Revenue", {}), pnl_prior.get("Revenue", {}), is_expense=False)
+    rev_var, rev_pct = format_variance(totals_current["total_revenue"], totals_prior["total_revenue"])
+    rows.append({
+        "Account": "**Total Revenue**",
+        label_prior: f"**{format_currency(totals_prior['total_revenue'])}**",
+        label_current: f"**{format_currency(totals_current['total_revenue'])}**",
+        "Variance $": f"**{format_currency(rev_var)}**",
+        "Variance %": f"**{rev_pct}**"
+    })
+    rows.append({"Account": "", label_prior: "", label_current: "", "Variance $": "", "Variance %": ""})
+    
+    # COGS
+    add_section("COST OF GOODS SOLD", pnl_current.get("Cost of Goods Sold", {}), pnl_prior.get("Cost of Goods Sold", {}), is_expense=True)
+    cogs_var, cogs_pct = format_variance(totals_current["total_cogs"], totals_prior["total_cogs"])
+    rows.append({
+        "Account": "**Total COGS**",
+        label_prior: f"**{format_currency(totals_prior['total_cogs'])}**",
+        label_current: f"**{format_currency(totals_current['total_cogs'])}**",
+        "Variance $": f"**{format_currency(cogs_var)}**",
+        "Variance %": f"**{cogs_pct}**"
+    })
+    rows.append({"Account": "", label_prior: "", label_current: "", "Variance $": "", "Variance %": ""})
+    
+    # Gross Profit
+    gp_var, gp_pct = format_variance(totals_current["gross_profit"], totals_prior["gross_profit"])
+    rows.append({
+        "Account": "**GROSS PROFIT**",
+        label_prior: f"**{format_currency(totals_prior['gross_profit'])}** ({totals_prior['gross_margin']:.1f}%)",
+        label_current: f"**{format_currency(totals_current['gross_profit'])}** ({totals_current['gross_margin']:.1f}%)",
+        "Variance $": f"**{format_currency(gp_var)}**",
+        "Variance %": f"**{gp_pct}**"
+    })
+    rows.append({"Account": "", label_prior: "", label_current: "", "Variance $": "", "Variance %": ""})
+    
+    # Expenses
+    add_section("OPERATING EXPENSES", pnl_current.get("Expenses", {}), pnl_prior.get("Expenses", {}), is_expense=True)
+    exp_var, exp_pct = format_variance(totals_current["total_expenses"], totals_prior["total_expenses"])
+    rows.append({
+        "Account": "**Total Operating Expenses**",
+        label_prior: f"**{format_currency(totals_prior['total_expenses'])}**",
+        label_current: f"**{format_currency(totals_current['total_expenses'])}**",
+        "Variance $": f"**{format_currency(exp_var)}**",
+        "Variance %": f"**{exp_pct}**"
+    })
+    rows.append({"Account": "", label_prior: "", label_current: "", "Variance $": "", "Variance %": ""})
+    
+    # Net Income
+    ni_var, ni_pct = format_variance(totals_current["net_income"], totals_prior["net_income"])
+    rows.append({
+        "Account": "**NET INCOME**",
+        label_prior: f"**{format_currency(totals_prior['net_income'])}** ({totals_prior['net_margin']:.1f}%)",
+        label_current: f"**{format_currency(totals_current['net_income'])}** ({totals_current['net_margin']:.1f}%)",
+        "Variance $": f"**{format_currency(ni_var)}**",
+        "Variance %": f"**{ni_pct}**"
+    })
+    
+    # Display
+    df = pd.DataFrame(rows)
+    st.dataframe(df, hide_index=True, use_container_width=True, height=600)
+    
+    # Variance Commentary
+    st.subheader("📝 Key Variance Analysis")
+    
+    commentary = []
+    
+    # Revenue commentary
+    if totals_prior["total_revenue"] > 0:
+        rev_change = totals_current["total_revenue"] - totals_prior["total_revenue"]
+        rev_pct_val = (rev_change / totals_prior["total_revenue"]) * 100
+        if abs(rev_pct_val) > 5:
+            direction = "increased" if rev_change > 0 else "decreased"
+            commentary.append(f"**Revenue** {direction} by {format_currency(abs(rev_change))} ({abs(rev_pct_val):.1f}%)")
+    
+    # Find top expense variances
+    expense_variances = []
+    for acct in set(pnl_current.get("Expenses", {}).keys()) | set(pnl_prior.get("Expenses", {}).keys()):
+        curr = abs(pnl_current.get("Expenses", {}).get(acct, 0))
+        prior = abs(pnl_prior.get("Expenses", {}).get(acct, 0))
+        if prior > 0:
+            var_pct = ((curr - prior) / prior) * 100
+            if abs(var_pct) > 15 and abs(curr - prior) > 100:
+                expense_variances.append((acct, curr - prior, var_pct))
+    
+    # Sort by absolute variance
+    expense_variances.sort(key=lambda x: -abs(x[1]))
+    
+    for acct, var_amt, var_pct in expense_variances[:5]:
+        direction = "increased" if var_amt > 0 else "decreased"
+        icon = "🔴" if var_amt > 0 else "🟢"
+        commentary.append(f"{icon} **{acct}** {direction} by {format_currency(abs(var_amt))} ({abs(var_pct):.1f}%)")
+    
+    # Net income commentary
+    if totals_prior["net_income"] != 0:
+        ni_change = totals_current["net_income"] - totals_prior["net_income"]
+        ni_pct_val = (ni_change / abs(totals_prior["net_income"])) * 100
+        if abs(ni_pct_val) > 5:
+            direction = "improved" if ni_change > 0 else "declined"
+            icon = "🟢" if ni_change > 0 else "🔴"
+            commentary.append(f"{icon} **Net Income** {direction} by {format_currency(abs(ni_change))} ({abs(ni_pct_val):.1f}%)")
+    
+    if commentary:
+        for item in commentary:
+            st.markdown(f"• {item}")
+    else:
+        st.info("No significant variances detected between periods.")
+    
+    return totals_current, totals_prior
+
+
+def render_pnl(pnl_data: dict, title: str = "📊 Profit & Loss Statement"):
+    """Render a single-period P&L statement"""
+    st.header(title)
+    
+    totals = calculate_pnl_totals(pnl_data)
+    
+    # Summary metrics at top
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("Revenue", format_currency(totals["total_revenue"]))
+    with col2:
+        st.metric("Gross Profit", format_currency(totals["gross_profit"]), f"{totals['gross_margin']:.1f}%")
+    with col3:
+        st.metric("Operating Expenses", format_currency(totals["total_expenses"]))
+    with col4:
+        st.metric("Net Income", format_currency(totals["net_income"]), f"{totals['net_margin']:.1f}%")
+    
+    st.divider()
+    
+    # Detailed P&L
+    rows = []
+    
+    # Revenue
+    rows.append({"Account": "**REVENUE**", "Amount": ""})
+    for name, amt in sorted(pnl_data.get("Revenue", {}).items(), key=lambda x: -abs(x[1])):
+        rows.append({"Account": f"    {name}", "Amount": format_currency(abs(amt))})
+    rows.append({"Account": "**Total Revenue**", "Amount": f"**{format_currency(totals['total_revenue'])}**"})
+    rows.append({"Account": "", "Amount": ""})
+    
+    # COGS
+    if pnl_data.get("Cost of Goods Sold"):
+        rows.append({"Account": "**COST OF GOODS SOLD**", "Amount": ""})
+        for name, amt in sorted(pnl_data.get("Cost of Goods Sold", {}).items(), key=lambda x: -abs(x[1])):
+            rows.append({"Account": f"    {name}", "Amount": format_currency(abs(amt))})
+        rows.append({"Account": "**Total COGS**", "Amount": f"**{format_currency(totals['total_cogs'])}**"})
+        rows.append({"Account": "", "Amount": ""})
+    
+    # Gross Profit
+    rows.append({"Account": "**GROSS PROFIT**", "Amount": f"**{format_currency(totals['gross_profit'])}** ({totals['gross_margin']:.1f}%)"})
+    rows.append({"Account": "", "Amount": ""})
+    
+    # Expenses
+    rows.append({"Account": "**OPERATING EXPENSES**", "Amount": ""})
+    for name, amt in sorted(pnl_data.get("Expenses", {}).items(), key=lambda x: -abs(x[1])):
+        rows.append({"Account": f"    {name}", "Amount": format_currency(abs(amt))})
+    rows.append({"Account": "**Total Operating Expenses**", "Amount": f"**{format_currency(totals['total_expenses'])}**"})
+    rows.append({"Account": "", "Amount": ""})
+    
+    # Net Income
+    rows.append({"Account": "**NET INCOME**", "Amount": f"**{format_currency(totals['net_income'])}** ({totals['net_margin']:.1f}%)"})
+    
+    df = pd.DataFrame(rows)
+    st.dataframe(df, hide_index=True, use_container_width=True, height=500)
+    
+    return totals
+
+
+def render_analysis(analysis, is_demo=False, pnl_data=None, transactions=None, account_map=None):
     """Render analysis results - used for both real and demo data"""
     
     if is_demo:
         st.markdown('<span style="background: #dc2626; color: white; padding: 4px 12px; border-radius: 20px; font-size: 0.75rem; font-weight: 700;">SAMPLE ANALYSIS</span>', unsafe_allow_html=True)
         st.caption("This is example data showing what your analysis will look like")
     
-    # Show P&L first if we have it
-    if pnl_data:
+    # Period selection UI (only if we have transactions)
+    if transactions and not is_demo:
+        st.header("📅 Period Selection")
+        
+        months = extract_months_from_transactions(transactions)
+        
+        if months:
+            # Convert to readable format
+            month_labels = {m: pd.to_datetime(m).strftime("%B %Y") for m in months}
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                view_mode = st.radio(
+                    "View Mode",
+                    ["Full Year", "Compare Two Months"],
+                    horizontal=True
+                )
+            
+            if view_mode == "Compare Two Months":
+                col1, col2 = st.columns(2)
+                with col1:
+                    prior_month = st.selectbox(
+                        "Prior Period",
+                        options=months[:-1] if len(months) > 1 else months,
+                        format_func=lambda x: month_labels.get(x, x),
+                        index=max(0, len(months) - 2) if len(months) > 1 else 0
+                    )
+                with col2:
+                    current_month = st.selectbox(
+                        "Current Period", 
+                        options=months,
+                        format_func=lambda x: month_labels.get(x, x),
+                        index=len(months) - 1
+                    )
+                
+                # Filter transactions and build P&Ls
+                txns_prior = filter_transactions_by_month(transactions, prior_month)
+                txns_current = filter_transactions_by_month(transactions, current_month)
+                
+                pnl_prior = build_pnl_from_transactions(txns_prior, account_map)
+                pnl_current = build_pnl_from_transactions(txns_current, account_map)
+                
+                st.divider()
+                
+                # Show comparison
+                render_pnl_comparison(
+                    pnl_current, 
+                    pnl_prior,
+                    month_labels.get(current_month, current_month),
+                    month_labels.get(prior_month, prior_month)
+                )
+                
+                st.divider()
+            else:
+                # Full year view
+                if pnl_data:
+                    render_pnl(pnl_data, "📊 Full Year P&L")
+                    st.divider()
+        else:
+            # No month data, show full P&L
+            if pnl_data:
+                render_pnl(pnl_data)
+                st.divider()
+    elif pnl_data:
+        # Demo mode or no transactions - just show P&L
         render_pnl(pnl_data)
         st.divider()
     
     # Summary metrics
-    st.header("💰 Summary")
+    st.header("💰 Expense Analysis Summary")
     
     col1, col2, col3, col4 = st.columns(4)
     
@@ -930,10 +1253,10 @@ if analyze_btn and coa_file and gl_file and user:
             st.info(f"🔧 Debug: Running analysis (code version: 2026-01-31 02:01)")
             
             # Run analysis
-            analysis, account_map, pnl_data = run_analysis(coa_path, gl_path, industry)
+            analysis, account_map, pnl_data, transactions = run_analysis(coa_path, gl_path, industry)
             
             # DEBUG: Show calculated values
-            st.success(f"🔧 Debug: Total Expenses = ${analysis.total_ga_expenses:,.2f}")
+            st.success(f"🔧 Debug: Total Expenses = ${analysis.total_ga_expenses:,.2f} | Transactions: {len(transactions)}")
             
             # Cleanup temp files
             os.unlink(coa_path)
@@ -948,6 +1271,7 @@ if analyze_btn and coa_file and gl_file and user:
             st.session_state['analysis'] = analysis
             st.session_state['account_map'] = account_map
             st.session_state['pnl_data'] = pnl_data
+            st.session_state['transactions'] = transactions
             
             st.rerun()
             
@@ -959,6 +1283,8 @@ if analyze_btn and coa_file and gl_file and user:
 if 'analysis' in st.session_state:
     analysis = st.session_state['analysis']
     pnl_data = st.session_state.get('pnl_data')
+    transactions = st.session_state.get('transactions', [])
+    account_map = st.session_state.get('account_map', {})
     
     # Clear analysis button
     if st.sidebar.button("🔄 New Analysis", use_container_width=True):
@@ -966,9 +1292,11 @@ if 'analysis' in st.session_state:
         del st.session_state['account_map']
         if 'pnl_data' in st.session_state:
             del st.session_state['pnl_data']
+        if 'transactions' in st.session_state:
+            del st.session_state['transactions']
         st.rerun()
     
-    render_analysis(analysis, is_demo=False, pnl_data=pnl_data)
+    render_analysis(analysis, is_demo=False, pnl_data=pnl_data, transactions=transactions, account_map=account_map)
     
     # Show upgrade CTA for free users
     if user and not user.get("is_pro"):
