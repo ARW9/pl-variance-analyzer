@@ -296,7 +296,7 @@ def render_upgrade_cta(user: dict):
     
     with col1:
         st.markdown("### 🚀 Upgrade to Pro")
-        st.markdown("**$10/month** — Unlimited uploads, priority support")
+        st.markdown("**$10/month** — Unlimited uploads")
     
     with col2:
         if st.button("Upgrade Now", type="primary", use_container_width=True):

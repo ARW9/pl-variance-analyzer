@@ -2196,6 +2196,14 @@ You agree to:
         </div>
         """, unsafe_allow_html=True)
 
+# Footer
+st.markdown("---")
+st.markdown("""
+<p style="text-align: center; color: #888; font-size: 0.8rem;">
+🔒 Privacy Policy · 📜 Terms of Service — see sections above
+</p>
+""", unsafe_allow_html=True)
+
 
 # Handle analysis
 if analyze_btn and pl_file and user:
