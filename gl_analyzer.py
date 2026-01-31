@@ -621,3 +621,4 @@ if __name__ == "__main__":
     api_key = sys.argv[3] if len(sys.argv) > 3 else None
     
     print(generate_report(gl_file, mapping_file, api_key))
+# Parsing updated Sat Jan 31 13:02:27 EST 2026
