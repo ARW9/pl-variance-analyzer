@@ -604,6 +604,10 @@ with st.sidebar:
         """)
     
     st.markdown("*📖 More questions? See FAQs at the bottom of the page*")
+    
+    st.divider()
+    st.caption("🔒 Privacy Policy · 📜 Terms of Service")
+    st.caption("See full policies at bottom of main page")
 
 
 def save_uploaded_file(uploaded_file) -> str:
@@ -2195,14 +2199,6 @@ You agree to:
             <p>Sign in with your email above to get started. No credit card required.</p>
         </div>
         """, unsafe_allow_html=True)
-
-# Footer
-st.markdown("---")
-st.markdown("""
-<p style="text-align: center; color: #888; font-size: 0.8rem;">
-🔒 Privacy Policy · 📜 Terms of Service — see sections above
-</p>
-""", unsafe_allow_html=True)
 
 
 # Handle analysis
