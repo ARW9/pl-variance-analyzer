@@ -6,3 +6,4 @@ supabase>=2.0.0
 stripe>=7.0.0
 resend>=0.7.0
 tabulate
+plotly>=5.18.0
