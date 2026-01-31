@@ -1959,7 +1959,7 @@ Expenses that are predictable and stable.
 
 
 # Main content - Show landing page if no analysis yet
-if 'pl_statement' not in st.session_state and 'analysis' not in st.session_state:
+if 'analysis' not in st.session_state:
     
     # Demo Preview Section
     st.header("📈 See What You'll Get")
@@ -2079,12 +2079,12 @@ if analyze_btn and pl_file and user:
     with st.spinner("Analyzing P&L data..."):
         try:
             # Import and use the P&L parser
-            from pl_parser import parse_pl_csv, get_summary_dict, get_variance_analysis
+            from pl_parser import parse_pl_csv, get_summary_dict, PLSection
+            from expense_analyzer import GAAnalysis, ExpenseCategory
             
             # Parse the P&L CSV
             statement = parse_pl_csv(pl_path)
             summary = get_summary_dict(statement)
-            variances = get_variance_analysis(statement)
             
             # Validate we got data
             if not statement.line_items:
@@ -2103,6 +2103,86 @@ if analyze_btn and pl_file and user:
             # Show validation info
             st.success(f"✓ P&L parsed: {statement.company_name} | {statement.date_range} | {len(statement.line_items)} accounts")
             
+            # Convert P&L statement to GAAnalysis format for existing render_analysis
+            totals = summary['totals']
+            monthly = summary.get('monthly', {})
+            
+            # Build expense categories from P&L line items
+            expense_items = [item for item in statement.line_items 
+                           if item.section == PLSection.EXPENSES and not item.is_total_row and item.total != 0]
+            
+            categories = []
+            for item in sorted(expense_items, key=lambda x: abs(x.total), reverse=True):
+                cat = ExpenseCategory(
+                    name=item.name,
+                    total=abs(item.total),
+                    pct_of_total_expenses=(abs(item.total) / totals['expenses'] * 100) if totals['expenses'] else 0,
+                    pct_of_revenue=(abs(item.total) / totals['revenue'] * 100) if totals['revenue'] else 0,
+                    transaction_count=0,  # Not available from P&L
+                    avg_transaction=0,
+                    monthly_trend={m: item.monthly_values.get(m, 0) for m in statement.months if m.lower() != 'total'}
+                )
+                categories.append(cat)
+            
+            # Build monthly expense totals
+            monthly_totals = {}
+            for month in statement.months:
+                if month.lower() != 'total':
+                    monthly_totals[month] = monthly.get('expenses', {}).get(month, 0)
+            
+            # Create GAAnalysis object
+            analysis = GAAnalysis(
+                total_ga_expenses=totals['expenses'],
+                ga_as_pct_of_revenue=(totals['expenses'] / totals['revenue'] * 100) if totals['revenue'] else 0,
+                categories=categories,
+                top_vendors=[],  # Requires GL data
+                fixed_costs=0,
+                variable_costs=totals['expenses'],
+                discretionary_costs=0,
+                essential_costs=totals['expenses'],
+                unknown_vendors_total=0,
+                unknown_vendors_count=0,
+                monthly_totals=monthly_totals,
+                insights=[],
+                recommendations=[]
+            )
+            
+            # Build P&L data structure for render_analysis
+            pnl_data = {
+                'totals': totals,
+                'monthly': monthly,
+                'company_name': statement.company_name,
+                'date_range': statement.date_range
+            }
+            
+            # Build simple transactions list from P&L for month filtering
+            # Each expense line item becomes a "transaction" per month
+            from dataclasses import dataclass as dc
+            @dc
+            class SimpleTxn:
+                date: str
+                account: str
+                amount: float
+                account_type: str = "Expense"
+            
+            transactions = []
+            for item in statement.line_items:
+                if item.is_total_row:
+                    continue
+                for month, value in item.monthly_values.items():
+                    if month.lower() != 'total' and value != 0:
+                        # Convert month name to date format (first of month)
+                        try:
+                            month_date = pd.to_datetime(month).strftime("%Y-%m-01")
+                        except:
+                            month_date = month
+                        transactions.append(SimpleTxn(
+                            date=month_date,
+                            account=item.name,
+                            amount=value,
+                            account_type=item.section.value
+                        ))
+            
             # Cleanup temp files
             os.unlink(pl_path)
             if gl_path:
@@ -2113,11 +2193,13 @@ if analyze_btn and pl_file and user:
                 increment_usage(user["id"])
                 st.session_state.user["analyses_used"] = user.get("analyses_used", 0) + 1
             
-            # Store in session state
-            st.session_state['pl_statement'] = statement
-            st.session_state['pl_summary'] = summary
-            st.session_state['pl_variances'] = variances
+            # Store in session state (using existing keys for render_analysis compatibility)
+            st.session_state['analysis'] = analysis
+            st.session_state['pnl_data'] = pnl_data
+            st.session_state['transactions'] = transactions
+            st.session_state['account_map'] = {}  # Empty - no COA needed
             st.session_state['industry'] = industry
+            st.session_state['date_format'] = 'auto'
             
             st.rerun()
             
@@ -2139,26 +2221,34 @@ if analyze_btn and pl_file and user:
             
             If the problem persists, please contact support.
             """)
+            import traceback
+            st.code(traceback.format_exc())
             st.stop()
 
 # Display results if we have them
-if 'pl_statement' in st.session_state:
-    statement = st.session_state['pl_statement']
-    summary = st.session_state['pl_summary']
-    variances = st.session_state['pl_variances']
+if 'analysis' in st.session_state:
+    analysis = st.session_state['analysis']
+    pnl_data = st.session_state.get('pnl_data')
+    transactions = st.session_state.get('transactions', [])
+    account_map = st.session_state.get('account_map', {})
     selected_industry = st.session_state.get('industry', 'default')
+    selected_date_format = st.session_state.get('date_format', 'auto')
     
     # Clear analysis button
     if st.sidebar.button("🔄 New Analysis", use_container_width=True):
-        del st.session_state['pl_statement']
-        del st.session_state['pl_summary']
-        del st.session_state['pl_variances']
+        del st.session_state['analysis']
+        if 'pnl_data' in st.session_state:
+            del st.session_state['pnl_data']
+        if 'transactions' in st.session_state:
+            del st.session_state['transactions']
+        if 'account_map' in st.session_state:
+            del st.session_state['account_map']
         if 'industry' in st.session_state:
             del st.session_state['industry']
         st.rerun()
     
-    # Render the P&L analysis
-    render_pl_analysis(statement, summary, variances, selected_industry)
+    # Use the existing render_analysis function
+    render_analysis(analysis, is_demo=False, pnl_data=pnl_data, transactions=transactions, account_map=account_map, industry=selected_industry)
     
     # Show upgrade CTA for free users
     if user and not user.get("is_pro"):
