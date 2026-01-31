@@ -114,6 +114,36 @@ def parse_gl_with_mapping(gl_file: str, account_map: Dict[str, AccountType], dat
     else:  # auto
         dayfirst = detect_date_format(df)
     
+    # Helper function to match bilingual account names
+    def lookup_account_type(name: str) -> AccountType:
+        """Look up account type, handling bilingual names like 'English / French'"""
+        # Direct match
+        if name in account_map:
+            return account_map[name]
+        
+        # Try splitting on " / " for bilingual names
+        if " / " in name:
+            parts = name.split(" / ")
+            for part in parts:
+                part = part.strip()
+                if part in account_map:
+                    return account_map[part]
+                # Also try case-insensitive
+                for coa_name, coa_type in account_map.items():
+                    if coa_name.lower() == part.lower():
+                        return coa_type
+        
+        # Case-insensitive match
+        name_lower = name.lower()
+        for coa_name, coa_type in account_map.items():
+            if coa_name.lower() == name_lower:
+                return coa_type
+            # Check if COA name is contained in GL name (for bilingual)
+            if coa_name.lower() in name_lower:
+                return coa_type
+        
+        return AccountType.UNKNOWN
+    
     accounts = {}
     all_transactions = []
     current_account = None
@@ -207,40 +237,16 @@ def parse_gl_with_mapping(gl_file: str, account_map: Dict[str, AccountType], dat
                             break
                 
                 current_account = full_account_name
-                # Look up type in mapping
-                current_account_type = account_map.get(current_account, AccountType.UNKNOWN)
+                # Look up type using smart matching (handles bilingual names)
+                current_account_type = lookup_account_type(current_account)
                 
-                # Try smarter matching if exact match fails
+                # Try additional matching if still unknown
                 if current_account_type == AccountType.UNKNOWN:
                     # Try stripping account number prefix (e.g., "1000 Rent" -> "Rent")
                     import re
                     stripped_name = re.sub(r'^\d+[\s\-]+', '', current_account).strip()
                     if stripped_name and stripped_name != current_account:
-                        current_account_type = account_map.get(stripped_name, AccountType.UNKNOWN)
-                    
-                    # Try matching with parent:child format
-                    if current_account_type == AccountType.UNKNOWN:
-                        for mapped_name, mapped_type in account_map.items():
-                            if mapped_name.endswith(":" + current_account) or mapped_name == current_account:
-                                current_account_type = mapped_type
-                                break
-                    
-                    # Try case-insensitive parent:child matching
-                    if current_account_type == AccountType.UNKNOWN:
-                        for mapped_name, mapped_type in account_map.items():
-                            if mapped_name.lower().endswith(":" + current_account.lower()):
-                                current_account_type = mapped_type
-                                break
-                    
-                    # Try matching stripped name with parent:child format
-                    if current_account_type == AccountType.UNKNOWN and stripped_name:
-                        for mapped_name, mapped_type in account_map.items():
-                            if mapped_name.endswith(":" + stripped_name) or mapped_name == stripped_name:
-                                current_account_type = mapped_type
-                                break
-                            if mapped_name.lower().endswith(":" + stripped_name.lower()):
-                                current_account_type = mapped_type
-                                break
+                        current_account_type = lookup_account_type(stripped_name)
                 
                 if current_account not in accounts:
                     accounts[current_account] = AccountSummary(
