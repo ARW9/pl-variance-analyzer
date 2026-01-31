@@ -160,9 +160,16 @@ def parse_gl_with_mapping(gl_file: str, account_map: Dict[str, AccountType]) -> 
                 date_val = row[date_col] if date_col and len(row) > date_col else row[1]
                 date = ""
                 if pd.notna(date_val):
-                    if hasattr(date_val, 'strftime'):
-                        date = date_val.strftime('%Y-%m-%d')
-                    else:
+                    # Always normalize to YYYY-MM-DD format
+                    try:
+                        if hasattr(date_val, 'strftime'):
+                            date = date_val.strftime('%Y-%m-%d')
+                        else:
+                            # Parse string dates with pandas and normalize
+                            parsed = pd.to_datetime(date_val, dayfirst=False)
+                            date = parsed.strftime('%Y-%m-%d')
+                    except:
+                        # Fallback: keep original string
                         date = str(date_val).strip()
                 
                 # Get vendor

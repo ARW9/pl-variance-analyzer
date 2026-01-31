@@ -1280,17 +1280,24 @@ def render_analysis(analysis, is_demo=False, pnl_data=None, transactions=None, a
             if transactions:
                 sample_dates = [t.date for t in transactions[:10]]
                 st.write(f"**Sample dates (first 10):** {sample_dates}")
-                # Show date format distribution
-                date_formats = {"YYYY-MM-DD": 0, "MM/DD/YYYY": 0, "other": 0}
-                for t in transactions[:100]:
-                    d = str(t.date)
-                    if len(d) >= 10 and d[4] == '-':
-                        date_formats["YYYY-MM-DD"] += 1
-                    elif '/' in d:
-                        date_formats["MM/DD/YYYY"] += 1
-                    else:
-                        date_formats["other"] += 1
-                st.write(f"**Date format distribution (first 100):** {date_formats}")
+                
+                # Show transactions per month
+                from collections import Counter
+                month_counts = Counter()
+                unparseable = []
+                for t in transactions:
+                    try:
+                        parsed = pd.to_datetime(t.date, dayfirst=False)
+                        month_counts[parsed.strftime("%Y-%m")] += 1
+                    except:
+                        unparseable.append(t.date)
+                
+                st.write(f"**Transactions per month:**")
+                for month, count in sorted(month_counts.items()):
+                    st.write(f"  {month}: {count} transactions")
+                
+                if unparseable:
+                    st.warning(f"**Unparseable dates ({len(unparseable)}):** {unparseable[:10]}")
         
         months = extract_months_from_transactions(transactions)
         
