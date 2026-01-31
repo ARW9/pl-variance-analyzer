@@ -357,7 +357,7 @@ with st.sidebar:
             if st.button("🚀 Upgrade to Pro", type="secondary", use_container_width=True):
                 try:
                     checkout_url = create_checkout_session(user["email"], user["id"])
-                    st.markdown(f'<a href="{checkout_url}" target="_blank" rel="noopener noreferrer"><button style="background:#dc2626;color:white;padding:10px 20px;border:none;border-radius:5px;font-weight:bold;cursor:pointer;">Click here to open checkout</button></a>', unsafe_allow_html=True)
+                    st.components.v1.html(f'<script>window.open("{checkout_url}", "_blank");</script>', height=0)
                 except Exception as e:
                     st.error(f"Error: {e}")
     else:
