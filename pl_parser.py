@@ -98,7 +98,7 @@ def detect_section(row_name: str, current_section: PLSection) -> PLSection:
         return PLSection.NET_OPERATING_INCOME
     elif name_lower == "other income":
         return PLSection.OTHER_INCOME
-    elif name_lower in ["other expense", "other expenses"]:
+    elif name_lower in ["other expense", "other expenses", "other costs"]:
         return PLSection.OTHER_EXPENSE
     elif name_lower in ["net other income", "total other income/expense"]:
         return PLSection.NET_OTHER_INCOME
@@ -233,7 +233,7 @@ def parse_pl_csv(file_path: str) -> PLStatement:
                 qbo_total_expenses = monthly_values
             elif name_lower in ["total for other income", "total other income"]:
                 qbo_total_other_income = monthly_values
-            elif name_lower in ["total for other expense", "total other expense", "total other expenses"]:
+            elif name_lower in ["total for other expense", "total other expense", "total other expenses", "total for other expenses"]:
                 qbo_total_other_expense = monthly_values
             continue
         

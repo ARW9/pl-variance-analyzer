@@ -2132,9 +2132,12 @@ if analyze_btn and pl_file and user:
                 st.write(f"- Net Operating Income (GP - Expenses): ${calc_noi:,.2f}")
                 st.write(f"- Net Income (NOI + Other Inc - Other Exp): ${calc_ni:,.2f}")
                 st.write("---")
-                st.write("**If Operating Income should be $65,749:**")
-                st.write("This would mean Operating Income = Net Income (after Other Income/Expenses)")
-                st.write(f"Currently showing Net Operating Income (before Other) = ${summary['totals'].get('operating_income', 0):,.2f}")
+                st.write("**Line items by section:**")
+                from pl_parser import PLSection
+                other_income_items = [f"{item.name}: ${item.total:,.2f}" for item in statement.line_items if item.section == PLSection.OTHER_INCOME and not item.is_total_row]
+                other_expense_items = [f"{item.name}: ${item.total:,.2f}" for item in statement.line_items if item.section == PLSection.OTHER_EXPENSE and not item.is_total_row]
+                st.write(f"Other Income items: {other_income_items if other_income_items else 'None found'}")
+                st.write(f"Other Expense items: {other_expense_items if other_expense_items else 'None found'}")
             
             # Convert P&L statement to GAAnalysis format for existing render_analysis
             totals = summary['totals']
